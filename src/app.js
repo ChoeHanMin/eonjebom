@@ -65,6 +65,7 @@ export function createApp({ db, config }) {
     next();
   });
 
+  app.get('/healthz', (req, res) => res.type('text').send('ok'));
   app.use(express.static(PUBLIC_DIR));
   app.use(express.json({ limit: '6mb' }));
 

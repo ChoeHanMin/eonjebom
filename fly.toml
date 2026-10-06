@@ -1,0 +1,32 @@
+# Fly.io 설정. 앱 이름(app)은 fly.dev 전체에서 하나뿐이어야 해요.
+# 이미 쓰이는 이름이면 바꾸면 되고, 주소는 https://<앱 이름>.fly.dev 가 돼요.
+app = "eonjebom"
+primary_region = "nrt" # 도쿄 (한국에서 가장 가까운 리전)
+
+[build]
+
+[env]
+  TRUST_PROXY = "1"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  # SQLite 파일을 쓰므로 서버는 항상 1대만, 계속 켜 둔다. (캘린더 자동 동기화도 계속 돌아감)
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/healthz"
+    timeout = "5s"
+
+[mounts]
+  source = "eonjebom_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

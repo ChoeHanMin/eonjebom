@@ -49,6 +49,33 @@ npm start              # http://localhost:3000
 npm test
 ```
 
+## 배포 (Fly.io)
+
+`main` 브랜치에 코드가 올라가면 GitHub Actions가 테스트를 돌리고, 통과하면 [Fly.io](https://fly.io)에 자동으로 배포해요.
+처음 한 번은 앱과 데이터 저장용 볼륨(1GB)도 자동으로 만들어요. 컴퓨터 없이 휴대폰 브라우저만으로 할 수 있어요.
+
+### 처음 한 번만 할 일
+
+1. **Fly.io 가입**: https://fly.io/app/sign-up 에서 가입하고, 대시보드의 **Billing**에서 결제 카드를 등록해요.
+   (서버 1대 + 1GB 볼륨을 항상 켜 두는 구성이라 사용량 기준 대략 월 $2~3 정도예요.)
+2. **토큰 만들기**: Fly.io 대시보드 오른쪽 위 계정 메뉴 › **Access Tokens** › 새 토큰을 만들고, `FlyV1 …`로 시작하는 값을 통째로 복사해요.
+3. **GitHub에 토큰 등록**: 이 저장소 › **Settings** › **Secrets and variables** › **Actions** › **New repository secret**
+   - Name: `FLY_API_TOKEN`
+   - Secret: 2에서 복사한 값
+4. **배포 실행**: 저장소 › **Actions** › **Test & Deploy** › **Run workflow**. 몇 분 뒤 초록색 체크가 뜨면 끝이에요.
+5. 접속: **https://eonjebom.fly.dev**
+
+> 앱 이름 `eonjebom`을 이미 다른 사람이 쓰고 있으면 4단계에서 "Name has already been taken" 오류가 나요.
+> 그때는 `fly.toml`의 `app = "eonjebom"`을 다른 이름으로 바꾸면 되고, 주소는 `https://<바꾼 이름>.fly.dev`가 돼요.
+
+이후에는 `main`에 코드가 올라갈 때마다 자동으로 다시 배포돼요. 데이터(SQLite 파일)는 볼륨 `/data`에 저장되어 배포해도 그대로 남고,
+Fly.io가 볼륨 스냅샷을 매일 자동으로 만들어 둬요.
+
+### 배포한 서버에서 구글 캘린더 켜기
+
+1. 아래 "구글 캘린더 연동 설정"에서 리디렉션 URI를 `https://eonjebom.fly.dev/api/google/callback`으로 등록해요.
+2. Fly.io 대시보드 › 앱 › **Secrets**에 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`을 추가해요. 저장하면 서버가 자동으로 재시작돼요.
+
 ### 구글 캘린더 연동 설정 (선택)
 
 1. [Google Cloud Console](https://console.cloud.google.com/)에서 프로젝트를 만들고 **Google Calendar API**를 사용 설정해요.
@@ -70,7 +97,7 @@ npm test
 ```
 eonjebom/
 ├─ src/
-│  ├─ server.js        # 진입점: 환경 변수, 주기 동기화(30분마다, 3시간 지난 캘린더)
+│  ├─ server.js        # 진입점: 환경 변수, 주기 동기화(30분마다, 3시간 지난 캘린더), 종료 처리
 │  ├─ app.js           # Express 앱과 REST API
 │  ├─ db.js            # SQLite 스키마
 │  ├─ auth.js          # 비밀번호(scrypt), 세션 쿠키, 로그인 시도 제한
@@ -81,7 +108,10 @@ eonjebom/
 │  ├─ calendars.js     # 캘린더 동기화
 │  └─ safe-fetch.js    # iCal 주소 가져오기 (내부망 접근 차단, 5MB 제한)
 ├─ public/             # 빌드 없는 순수 HTML/CSS/JS 프론트엔드
-└─ test/               # node:test 단위·API 테스트
+├─ test/               # node:test 단위·API 테스트
+├─ Dockerfile          # 배포용 이미지
+├─ fly.toml            # Fly.io 설정 (도쿄 리전, 볼륨 /data)
+└─ .github/workflows/deploy.yml  # 테스트 → Fly.io 자동 배포
 ```
 
 ## API 요약
@@ -111,4 +141,5 @@ eonjebom/
 - 종일 일정(생일 등)은 시간을 막지 않는 것으로 처리해요.
 - 시간대는 KST로 고정이에요. 해외 친구와 쓰려면 사용자별 시간대 설정이 필요해요.
 - 안드로이드 앱을 만들면 삼성 캘린더를 기기에서 직접 읽을 수 있어요.
-- 운영 배포 시에는 HTTPS(`BASE_URL=https://…`)로 실행해야 쿠키에 `Secure`가 붙어요.
+- 운영 배포 시에는 HTTPS로 실행해야 쿠키에 `Secure`가 붙어요. Fly.io에서는 자동으로 `https://<앱 이름>.fly.dev`를 써요.
+- SQLite를 쓰므로 서버는 1대로만 운영해요. 사용자가 아주 많아지면 Postgres 등으로 옮겨야 해요.
