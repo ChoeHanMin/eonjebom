@@ -1,0 +1,19 @@
+{
+  "name": "eonjebom",
+  "version": "0.1.0",
+  "private": true,
+  "description": "언제봄 - 친구와 공통으로 비는 시간을 찾아주는 웹앱",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/server.js",
+    "dev": "node --disable-warning=ExperimentalWarning --watch src/server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test \"test/**/*.test.js\""
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "ical.js": "^2.2.1"
+  }
+}
