@@ -2,6 +2,7 @@ import { createStore, browserStorage } from '../../src/store.js';
 import { renderGrid } from './grid.js';
 import { saveGridImage } from './export.js';
 import { detectInApp, externalOpenUrl, shareableUrl } from './inapp.js';
+import { startPetals } from './petals.js';
 import {
   LEVELS,
   WEEKDAYS,
@@ -564,7 +565,15 @@ function renderInAppGuide(kind) {
   }
 }
 
+/** 벚꽃 배경과 흩날리는 꽃잎을 깐다. (모든 화면의 맨 뒤) */
+function addScenery() {
+  const canvas = h('canvas.petals', { 'aria-hidden': 'true' });
+  document.body.prepend(h('div.scene', { 'aria-hidden': 'true' }), canvas);
+  startPetals(canvas);
+}
+
 function startup() {
+  addScenery();
   const kind = EMBEDDED ? null : detectInApp(navigator.userAgent);
   if (kind && !sessionFlag('stayInApp')) return renderInAppGuide(kind);
   boot();

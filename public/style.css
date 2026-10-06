@@ -18,6 +18,9 @@
   --danger: #dc2626;
   --radius: 12px;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 2px 8px rgb(0 0 0 / 0.04);
+  /* 벚꽃 배경 위에 올리는 반투명 판과 배경을 살짝 덮는 막 */
+  --glass: rgb(255 255 255 / 0.86);
+  --scene-veil: linear-gradient(rgb(255 255 255 / 0.05), rgb(255 255 255 / 0.25));
   color-scheme: light;
 }
 
@@ -34,6 +37,8 @@
     --grid-hour: rgb(255 255 255 / 0.16);
     --accent: #22c55e;
     --accent-text: #0b1a10;
+    --glass: rgb(29 33 28 / 0.88);
+    --scene-veil: rgb(8 10 8 / 0.55);
     color-scheme: dark;
   }
 }
@@ -51,6 +56,8 @@
   --grid-hour: rgb(255 255 255 / 0.16);
   --accent: #22c55e;
   --accent-text: #0b1a10;
+  --glass: rgb(29 33 28 / 0.88);
+  --scene-veil: rgb(8 10 8 / 0.55);
   color-scheme: dark;
 }
 
@@ -180,8 +187,11 @@ button.icon {
   align-items: center;
   gap: 0.5rem 1.25rem;
   padding: 0.6rem 1rem;
-  background: var(--surface);
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  backdrop-filter: blur(14px) saturate(1.2);
   border-bottom: 1px solid var(--line);
+  box-shadow: 0 2px 12px rgb(0 0 0 / 0.06);
 }
 
 .topbar .logo {
@@ -201,17 +211,22 @@ button.icon {
 }
 
 .tab {
-  padding: 0.4rem 0.75rem;
+  padding: 0.45rem 0.8rem;
   border-radius: 999px;
-  color: var(--muted);
+  color: var(--text);
+  font-weight: 500;
   text-decoration: none;
   white-space: nowrap;
 }
 
+.tab:hover {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+
 .tab[aria-current='page'] {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--text);
-  font-weight: 600;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 700;
 }
 
 
@@ -392,10 +407,24 @@ button.icon {
   }
 }
 
+/* 시작 화면 소개: 배경 그림 위에서도 잘 읽히도록 반투명 판 위에 둔다 */
+.hero {
+  width: 100%;
+  max-width: 420px;
+  padding: 1.4rem 1.3rem 1.1rem;
+  border-radius: 16px;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 30px rgb(0 0 0 / 0.12);
+}
+
 .hero .logo {
   font-size: 2.6rem;
   font-weight: 800;
   margin: 0;
+  color: var(--accent);
+  letter-spacing: -0.02em;
 }
 
 .tagline {
@@ -1066,6 +1095,47 @@ details.howto strong {
 
 .inapp-link input {
   flex: 1;
+}
+
+/* ───────── 벚꽃 배경 ───────── */
+
+/* 화면에 고정된 배경 그림 (iOS 는 background-attachment: fixed 를 무시하므로 고정 요소로 깐다) */
+.scene {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background: url('./assets/background.webp') center 22% / cover no-repeat;
+}
+
+.scene::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--scene-veil);
+}
+
+/* 흩날리는 꽃잎 (내용 뒤에 그려서 글씨를 가리지 않음) */
+.petals {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* 카드 밖에 놓이는 안내 글도 배경 위에서 읽히게 */
+.compare-results > .hint,
+.loading {
+  background: var(--glass);
+  border-radius: 10px;
+  padding: 0.6rem 0.8rem;
+  color: var(--text);
+}
+
+.loading {
+  width: fit-content;
+  margin: 3rem auto;
 }
 
 /* ───────── 확인 창 ───────── */

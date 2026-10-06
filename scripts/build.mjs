@@ -14,8 +14,22 @@ const watch = process.argv.includes('--watch');
 const ICON =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='12' height='12' rx='3' fill='%2322c55e'/%3E%3Crect x='17' y='3' width='12' height='12' rx='3' fill='%23facc15'/%3E%3Crect x='3' y='17' width='12' height='12' rx='3' fill='%23facc15'/%3E%3Crect x='17' y='17' width='12' height='12' rx='3' fill='%23ef4444'/%3E%3C/svg%3E";
 
+const MIME = { webp: 'image/webp', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', svg: 'image/svg+xml' };
+
+async function inlineAssets(css) {
+  const refs = [...new Set([...css.matchAll(/url\('\.\/(assets\/[^']+)'\)/g)].map((m) => m[1]))];
+  for (const ref of refs) {
+    const data = await readFile(`${root}/public/${ref}`);
+    const mime = MIME[ref.split('.').pop().toLowerCase()];
+    if (!mime) throw new Error(`알 수 없는 그림 형식: ${ref}`);
+    css = css.replaceAll(`url('./${ref}')`, `url('data:${mime};base64,${data.toString('base64')}')`);
+  }
+  return css;
+}
+
 async function writeHtml(js) {
-  const css = await readFile(`${root}/public/style.css`, 'utf8');
+  // CSS 가 가리키는 그림 파일을 data: 주소로 바꿔 넣어, HTML 파일 하나만으로 동작하게 한다.
+  const css = await inlineAssets(await readFile(`${root}/public/style.css`, 'utf8'));
   const script = js.replaceAll('</script', '<\\/script');
   const body = `<div id="app"><p class="loading">불러오는 중…</p></div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
