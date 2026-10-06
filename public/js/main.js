@@ -1,5 +1,6 @@
 import { api, ApiError, getToken, setToken } from './api.js';
 import { renderGrid } from './grid.js';
+import { saveGridImage } from './export.js';
 import {
   LEVELS,
   WEEKDAYS,
@@ -20,7 +21,7 @@ const state = {
   profile: null,
   googleEnabled: false,
   brush: 3,
-  showAllHours: loadPref('showAllHours') === '1',
+  showAllHours: loadPref('showAllHours') !== '0', // 기본: 하루 48칸 전부
   datesWeek: mondayOf(todayKst()),
   compareWeek: mondayOf(todayKst()),
   selected: new Set(), // 비교할 친구 코드
@@ -169,7 +170,7 @@ async function saveEditLink() {
 }
 
 function visibleSlots() {
-  return state.showAllHours ? [0, SLOTS_PER_DAY] : [16, SLOTS_PER_DAY]; // 기본: 08:00 ~ 24:00
+  return state.showAllHours ? [0, SLOTS_PER_DAY] : [16, SLOTS_PER_DAY]; // 새벽을 숨기면 08:00 ~ 24:00
 }
 
 function hoursToggle(rerender) {
@@ -188,6 +189,31 @@ function hoursToggle(rerender) {
     ' 새벽 시간(0~8시)도 보기',
   );
 }
+
+/** '이미지로 저장' 버튼. 휴대폰에서는 공유 창의 '이미지 저장'으로 갤러리에 들어간다. */
+function saveImageButton(getOptions) {
+  return h(
+    'button.small.save-image',
+    {
+      type: 'button',
+      onClick: async (e) => {
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        try {
+          const result = await saveGridImage(getOptions());
+          if (result === 'downloaded') toast('이미지를 저장했어요. (다운로드 폴더)', 'success');
+        } catch (err) {
+          toast(err.message || '이미지를 저장하지 못했어요.', 'error');
+        } finally {
+          btn.disabled = false;
+        }
+      },
+    },
+    '🖼 이미지로 저장',
+  );
+}
+
+const PAINT_HINT = '휴대폰: 칸 위를 손가락으로 끌면 칠해지고, 왼쪽 시간 줄을 밀면 스크롤돼요.';
 
 function swatch(level) {
   return h(`span.swatch.lv-${level ?? 'none'}`, { 'aria-hidden': 'true' });
@@ -707,7 +733,23 @@ async function renderCompare(root) {
       h(
         'section.card',
         {},
-        h('div.card-head', {}, h('h2', {}, '함께 보기'), hoursToggle(rerender)),
+        h(
+          'div.card-head',
+          {},
+          h('h2', {}, '함께 보기'),
+          saveImageButton(() => ({
+            title: `${names.join(' · ')} 언제 봄?`,
+            subtitle: `${formatDate(data.dates[0])} – ${formatDate(data.dates[data.dates.length - 1])} · 가장 바쁜 사람 기준`,
+            notes: data.suggestions
+              .slice(0, 3)
+              .map((s, i) => `추천 ${i + 1}. ${formatDate(s.date)} ${slotLabel(s.startSlot)}–${slotLabel(s.endSlot)}`),
+            columns: dateColumns(data.dates),
+            slots: visibleSlots(),
+            cell: (date, slot) => ({ level: data.cells[date][slot].level }),
+            filename: `eonjebom-together-${data.dates[0]}.png`,
+          })),
+        ),
+        h('div.toolbar', {}, hoursToggle(rerender)),
         h('p.hint', {}, '각 칸은 가장 바쁜 사람 기준이에요. 한 명이라도 입력하지 않은 칸은 회색이에요.'),
         legend(),
         gridHost,
@@ -741,11 +783,24 @@ async function renderWeekly(root) {
       h(
         'p.hint',
         {},
-        '수업·알바처럼 매주 같은 일정을 칠해 두세요. 색을 고른 뒤 칸을 끌어서 칠하면 자동으로 저장돼요. ',
-        '캘린더 일정과 날짜별로 직접 칠한 칸이 이 시간표보다 우선해요.',
+        '수업·알바처럼 매주 같은 일정을 칠해 두세요. 색을 고른 뒤 칸을 끌면 끈 범위가 한 번에 칠해지고 자동으로 저장돼요. ',
+        '(예: 07:00 칸부터 08:00 칸까지 끌면 07:00–08:30, 3칸) 캘린더 일정과 날짜별로 직접 칠한 칸이 이 시간표보다 우선해요.',
       ),
       palette(),
-      h('div.toolbar', {}, hoursToggle(rerender)),
+      h('p.hint.touch-only', {}, PAINT_HINT),
+      h(
+        'div.toolbar',
+        {},
+        hoursToggle(rerender),
+        saveImageButton(() => ({
+          title: `${state.profile.name}의 기본 시간표`,
+          subtitle: '매주 반복',
+          columns: WEEKDAYS.map((label, i) => ({ key: String(i), label })),
+          slots: visibleSlots(),
+          cell: (wd, slot) => ({ level: weekly.get(`${wd}:${slot}`) ?? null }),
+          filename: 'eonjebom-weekly.png',
+        })),
+      ),
       gridHost,
     ),
   );
@@ -777,6 +832,13 @@ async function renderDates(root) {
   const saver = saveIndicator();
   const gridHost = h('div.grid-host');
   const rerender = () => renderDates(root).catch(handleError);
+  const dateCell = (date, slot) => {
+    const c = data.cells[date][slot];
+    return {
+      level: c.level,
+      marks: c.source === 'calendar' ? ['from-calendar'] : c.source === 'override' ? ['from-override'] : [],
+    };
+  };
 
   root.replaceChildren(
     h(
@@ -797,8 +859,17 @@ async function renderDates(root) {
           rerender();
         }),
         hoursToggle(rerender),
+        saveImageButton(() => ({
+          title: `${state.profile.name}의 일정`,
+          subtitle: `${formatDate(data.dates[0])} – ${formatDate(data.dates[data.dates.length - 1])}`,
+          columns: dateColumns(data.dates),
+          slots: visibleSlots(),
+          cell: dateCell,
+          filename: `eonjebom-my-week-${data.dates[0]}.png`,
+        })),
       ),
       palette(),
+      h('p.hint.touch-only', {}, PAINT_HINT),
       legend([
         h('span.legend-item', {}, h('span.swatch.lv-none.from-calendar'), '캘린더에서 가져옴'),
         h('span.legend-item', {}, h('span.swatch.lv-none.from-override'), '이 날짜만 직접 칠함'),
@@ -812,13 +883,7 @@ async function renderDates(root) {
     slots: visibleSlots(),
     editable: true,
     brush: () => state.brush,
-    cell: (date, slot) => {
-      const c = data.cells[date][slot];
-      return {
-        level: c.level,
-        marks: c.source === 'calendar' ? ['from-calendar'] : c.source === 'override' ? ['from-override'] : [],
-      };
-    },
+    cell: dateCell,
     onPaint: (changed) => {
       const level = state.brush;
       saver

@@ -11,6 +11,8 @@
   --muted: #646a60;
   --line: #dfe3db;
   --line-strong: #c3c9be;
+  --grid-line: rgb(255 255 255 / 0.9);
+  --grid-hour: rgb(0 0 0 / 0.14);
   --accent: #16a34a;
   --accent-text: #ffffff;
   --danger: #dc2626;
@@ -28,6 +30,8 @@
     --muted: #9ba396;
     --line: #2e342c;
     --line-strong: #444c41;
+    --grid-line: rgb(0 0 0 / 0.55);
+    --grid-hour: rgb(255 255 255 / 0.16);
     --accent: #22c55e;
     --accent-text: #0b1a10;
     color-scheme: dark;
@@ -575,28 +579,39 @@ button.icon {
 }
 
 .time {
-  font-size: 0.7rem;
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
   color: var(--muted);
   text-align: right;
-  padding-right: 0.35rem;
-  height: 1.15rem;
-  line-height: 1;
+  padding-right: 0.4rem;
+  height: 1.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
   position: sticky;
   left: 0;
   z-index: 1;
   background: var(--surface);
+  border-right: 1px solid var(--line-strong);
+  border-bottom: 1px solid var(--line);
   touch-action: pan-x pan-y; /* 휴대폰에서는 왼쪽 시간 줄을 끌어 스크롤 */
 }
 
+.time.hour {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* 엑셀처럼 30분 = 1칸. 칸마다 테두리, 정각 줄은 조금 더 진하게 */
 .cell {
-  height: 1.15rem;
-  border-right: 1px solid var(--surface);
-  border-bottom: 1px dashed color-mix(in srgb, var(--surface) 70%, transparent);
+  height: 1.6rem;
+  border-right: 1px solid var(--grid-line);
+  border-bottom: 1px solid var(--grid-line);
   position: relative;
 }
 
 .cell.hour {
-  border-top: 1px solid var(--surface);
+  box-shadow: inset 0 1px 0 var(--grid-hour);
 }
 
 .grid:not(.editable) .cell {
@@ -621,6 +636,58 @@ button.icon {
   outline: 2px solid var(--text);
   outline-offset: -2px;
   z-index: 1;
+}
+
+/* 드래그하는 동안 손가락 위에 뜨는 범위 표시 */
+.drag-tip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 50;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 0.9rem;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.2);
+}
+
+.drag-tip::before {
+  content: '';
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 3px;
+  background: var(--lv-none);
+}
+
+.drag-tip.pv-3::before {
+  background: var(--lv3);
+}
+.drag-tip.pv-2::before {
+  background: var(--lv2);
+}
+.drag-tip.pv-1::before {
+  background: var(--lv1);
+}
+
+.touch-only {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .touch-only {
+    display: block;
+  }
+}
+
+.save-image {
+  margin-left: auto;
 }
 
 /* 드래그 미리보기 */

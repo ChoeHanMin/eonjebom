@@ -1,9 +1,13 @@
 import { slotLabel } from './levels.js';
 
+const EDGE_PX = 40; // 칠하는 중 가장자리에 손가락/마우스가 이만큼 가까우면 자동 스크롤
+const MAX_SCROLL_STEP = 14;
+
 /**
- * 시간표 격자를 그린다. 편집 모드에서는 드래그로 사각형 영역을 한 번에 칠할 수 있다.
+ * 엑셀처럼 30분 = 1칸인 시간표 격자를 그린다. (하루 48칸)
+ * 편집 모드에서는 색을 고른 뒤 드래그하면 사각형 범위를 한 번에 칠한다. (마우스·터치 모두)
  *
- * @param {HTMLElement} container
+ * @param {HTMLElement} container  스크롤되는 상자 (.grid-host)
  * @param {object} opts
  * @param {{key:string, label:string, sub?:string, today?:boolean, past?:boolean}[]} opts.columns
  * @param {[number, number]} opts.slots  표시할 슬롯 범위 [시작, 끝)
@@ -20,7 +24,7 @@ export function renderGrid(container, opts) {
 
   const grid = document.createElement('div');
   grid.className = `grid${editable ? ' editable' : ''}`;
-  grid.style.gridTemplateColumns = `3.2rem repeat(${columns.length}, minmax(2.4rem, 1fr))`;
+  grid.style.gridTemplateColumns = `3.4rem repeat(${columns.length}, minmax(2.6rem, 1fr))`;
 
   grid.append(div('corner'));
   for (const col of columns) {
@@ -33,11 +37,11 @@ export function renderGrid(container, opts) {
   const cells = []; // cells[slot - from][colIndex]
   for (let slot = from; slot < to; slot++) {
     const t = div(`time${slot % 2 === 0 ? ' hour' : ''}`);
-    if (slot % 2 === 0) t.textContent = slotLabel(slot);
+    t.textContent = slotLabel(slot);
     grid.append(t);
     const row = [];
     columns.forEach((col, ci) => {
-      const c = div(`cell${slot % 2 === 0 ? ' hour' : ''}`);
+      const c = div('cell');
       c.dataset.ci = ci;
       c.dataset.slot = slot;
       row.push(c);
@@ -49,8 +53,9 @@ export function renderGrid(container, opts) {
 
   function paintCell(el) {
     const col = columns[el.dataset.ci];
-    const { level, marks = [] } = opts.cell(col.key, Number(el.dataset.slot));
-    el.className = `cell${Number(el.dataset.slot) % 2 === 0 ? ' hour' : ''} lv-${level ?? 'none'}`;
+    const slot = Number(el.dataset.slot);
+    const { level, marks = [] } = opts.cell(col.key, slot);
+    el.className = `cell${slot % 2 === 0 ? ' hour' : ''} lv-${level ?? 'none'}`;
     if (col.past) el.classList.add('past');
     for (const m of marks) el.classList.add(m);
   }
@@ -75,20 +80,35 @@ export function renderGrid(container, opts) {
     let anchor = null;
     let current = null;
     let previewed = [];
+    let pointer = null; // 마지막 포인터 위치
+    let scrollFrame = 0;
+    const tip = div('drag-tip');
 
     const locate = (x, y) => {
       const el = document.elementFromPoint(x, y)?.closest('.cell');
       return el && grid.contains(el) ? { ci: Number(el.dataset.ci), slot: Number(el.dataset.slot) } : null;
     };
 
+    const bounds = () => ({
+      c0: Math.min(anchor.ci, current.ci),
+      c1: Math.max(anchor.ci, current.ci),
+      s0: Math.min(anchor.slot, current.slot),
+      s1: Math.max(anchor.slot, current.slot),
+    });
+
     const rect = () => {
-      const c0 = Math.min(anchor.ci, current.ci);
-      const c1 = Math.max(anchor.ci, current.ci);
-      const s0 = Math.min(anchor.slot, current.slot);
-      const s1 = Math.max(anchor.slot, current.slot);
+      const { c0, c1, s0, s1 } = bounds();
       const out = [];
       for (let s = s0; s <= s1; s++) for (let c = c0; c <= c1; c++) out.push({ ci: c, slot: s });
       return out;
+    };
+
+    // 예: '월 07:00–08:30 · 3칸', '월–수 07:00–08:30 · 9칸'
+    const describe = () => {
+      const { c0, c1, s0, s1 } = bounds();
+      const cols = c0 === c1 ? columns[c0].label : `${columns[c0].label}–${columns[c1].label}`;
+      const count = (s1 - s0 + 1) * (c1 - c0 + 1);
+      return `${cols} ${slotLabel(s0)}–${slotLabel(s1 + 1)} · ${count}칸`;
     };
 
     const preview = () => {
@@ -96,6 +116,55 @@ export function renderGrid(container, opts) {
       const b = opts.brush();
       previewed = rect().map(({ ci, slot }) => cells[slot - from][ci]);
       for (const el of previewed) el.classList.add('preview', `pv-${b ?? 'erase'}`);
+      tip.textContent = describe();
+      tip.className = `drag-tip show pv-${b ?? 'erase'}`;
+      placeTip();
+    };
+
+    // 범위 표시는 격자 상자 위쪽(요일 머리줄 자리)에 띄운다. 손가락 바로 위에 두면 칠하는 칸을 가린다.
+    // 손가락이 그 근처에 있으면 상자 아래쪽으로 옮긴다.
+    const placeTip = () => {
+      if (!pointer) return;
+      const box = container.getBoundingClientRect();
+      const w = tip.offsetWidth;
+      const tipH = tip.offsetHeight;
+      const x = Math.min(Math.max(8, box.left + box.width / 2 - w / 2), window.innerWidth - w - 8);
+      const top = Math.max(box.top, 0) + 6;
+      const bottom = Math.min(box.bottom, window.innerHeight) - tipH - 6;
+      const y = pointer.y < top + tipH + 50 ? bottom : top;
+      tip.style.transform = `translate(${x}px, ${y}px)`;
+    };
+
+    // 가장자리 근처에서는 상자(또는 페이지)를 스크롤하며 계속 칠할 수 있게 한다.
+    const autoScroll = () => {
+      scrollFrame = 0;
+      if (!anchor || !pointer) return;
+      const box = container.getBoundingClientRect();
+      const top = Math.max(box.top, 0);
+      const bottom = Math.min(box.bottom, window.innerHeight);
+      const left = Math.max(box.left, 0);
+      const right = Math.min(box.right, window.innerWidth);
+      const step = (dist) => Math.ceil(MAX_SCROLL_STEP * (1 - Math.max(dist, 0) / EDGE_PX));
+      let dy = 0;
+      let dx = 0;
+      if (pointer.y > bottom - EDGE_PX) dy = step(bottom - pointer.y);
+      else if (pointer.y < top + EDGE_PX + 40) dy = -step(pointer.y - top - 40); // 위쪽은 요일 머리줄만큼 여유
+      if (pointer.x > right - EDGE_PX) dx = step(right - pointer.x);
+      else if (pointer.x < left + EDGE_PX + 54) dx = -step(pointer.x - left - 54); // 왼쪽은 시간 줄만큼 여유
+      if (!dy && !dx) return;
+      const beforeTop = container.scrollTop;
+      const beforeLeft = container.scrollLeft;
+      const beforeWindow = window.scrollY;
+      container.scrollBy(dx, dy);
+      if (dy && container.scrollTop === beforeTop) window.scrollBy(0, dy);
+      const moved = container.scrollTop !== beforeTop || container.scrollLeft !== beforeLeft || window.scrollY !== beforeWindow;
+      if (!moved) return; // 더 스크롤할 곳이 없음
+      const hit = locate(pointer.x, pointer.y);
+      if (hit && (hit.ci !== current.ci || hit.slot !== current.slot)) {
+        current = hit;
+        preview();
+      }
+      scrollFrame = requestAnimationFrame(autoScroll);
     };
 
     grid.addEventListener('pointerdown', (e) => {
@@ -104,24 +173,33 @@ export function renderGrid(container, opts) {
       if (!hit) return;
       e.preventDefault();
       grid.setPointerCapture(e.pointerId);
+      document.body.append(tip);
+      pointer = { x: e.clientX, y: e.clientY };
       anchor = current = hit;
       preview();
     });
 
     grid.addEventListener('pointermove', (e) => {
       if (!anchor) return;
+      pointer = { x: e.clientX, y: e.clientY };
       const hit = locate(e.clientX, e.clientY);
       if (hit && (hit.ci !== current.ci || hit.slot !== current.slot)) {
         current = hit;
         preview();
+      } else {
+        placeTip();
       }
+      if (!scrollFrame) scrollFrame = requestAnimationFrame(autoScroll);
     });
 
     const finish = (apply) => {
       if (!anchor) return;
+      cancelAnimationFrame(scrollFrame);
+      scrollFrame = 0;
+      tip.remove();
       for (const el of previewed) el.classList.remove('preview', ...previewClasses);
       const changed = apply ? rect().map(({ ci, slot }) => ({ key: columns[ci].key, slot })) : [];
-      anchor = current = null;
+      anchor = current = pointer = null;
       previewed = [];
       if (changed.length) opts.onPaint(changed);
     };
