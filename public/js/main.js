@@ -258,7 +258,8 @@ function legend(extra = []) {
 }
 
 function palette() {
-  const options = [...LEVELS.map((l) => ({ value: l.value, label: l.label })), { value: null, label: '지우개' }];
+  // 지우개 버튼은 없다. 같은 색 칸을 한 번 더 누르거나 끌면 지워진다.
+  const options = LEVELS.map((l) => ({ value: l.value, label: l.label }));
   const wrap = h('div.palette', { role: 'radiogroup', 'aria-label': '칠할 색' });
   const buttons = options.map((o) =>
     h(
@@ -272,7 +273,7 @@ function palette() {
           for (const [i, b] of buttons.entries()) b.setAttribute('aria-checked', String(options[i].value === o.value));
         },
       },
-      o.value === null ? h('span.swatch.eraser', { 'aria-hidden': 'true' }) : swatch(o.value),
+      swatch(o.value),
       o.label,
     ),
   );
@@ -981,6 +982,7 @@ function renderWeekly(root) {
         'p.hint',
         {},
         '수업·알바처럼 매주 같은 일정을 칠해 두세요. 색을 고른 뒤 칸을 끌면 끈 범위가 한 번에 칠해지고 바로 저장돼요. ',
+        '같은 색으로 칠한 칸을 한 번 더 누르거나 끌면 지워져요. ',
         '(예: 07:00 칸부터 08:00 칸까지 끌면 07:00–08:30, 3칸) 캘린더 일정과 날짜별로 직접 칠한 칸이 이 시간표보다 우선해요.',
       ),
       palette(),
@@ -1008,8 +1010,7 @@ function renderWeekly(root) {
     editable: true,
     brush: () => state.brush,
     cell,
-    onPaint: (changed) => {
-      const level = state.brush;
+    onPaint: (changed, level) => {
       saver.run(() => store.setWeekly(changed.map(({ key, slot }) => ({ weekday: Number(key), slot, level }))));
       for (const { key, slot } of changed) {
         if (level === null) weekly.delete(`${key}:${slot}`);
@@ -1032,6 +1033,7 @@ function renderDates(root) {
     return {
       level: c.level,
       marks: c.source === 'calendar' ? ['from-calendar'] : c.source === 'override' ? ['from-override'] : [],
+      erasable: c.source === 'override', // 이 화면에서는 직접 칠한 칸만 지울 수 있다 (지우면 기본 시간표·캘린더 색으로)
     };
   };
 
@@ -1044,7 +1046,7 @@ function renderDates(root) {
         'p.hint',
         {},
         '기본 시간표와 캘린더 일정을 합친 실제 일정이에요. 이번 주만 다른 칸은 여기서 직접 칠하세요. ',
-        '지우개로 지우면 기본 시간표·캘린더 값으로 돌아가요.',
+        '여기서 직접 칠한 칸(점 표시)을 같은 색으로 한 번 더 누르거나 끌면 지워지고, 기본 시간표·캘린더 색으로 돌아가요.',
       ),
       h(
         'div.toolbar',
@@ -1079,8 +1081,7 @@ function renderDates(root) {
     editable: true,
     brush: () => state.brush,
     cell: dateCell,
-    onPaint: (changed) => {
-      const level = state.brush;
+    onPaint: (changed, level) => {
       saver.run(() => store.setOverrides(changed.map(({ key, slot }) => ({ date: key, slot, level }))));
       // 지운 칸은 기본 시간표/캘린더 값으로 돌아가므로 다시 계산한다.
       data = store.schedule(data.dates[0], 7);

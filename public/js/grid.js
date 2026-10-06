@@ -6,15 +6,17 @@ const MAX_SCROLL_STEP = 14;
 /**
  * 엑셀처럼 30분 = 1칸인 시간표 격자를 그린다. (하루 48칸)
  * 편집 모드에서는 색을 고른 뒤 드래그하면 사각형 범위를 한 번에 칠한다. (마우스·터치 모두)
+ * 고른 색과 같은 색 칸에서 시작하면(클릭 포함) 그 범위를 지운다. (when2meet 과 같은 방식)
  *
  * @param {HTMLElement} container  스크롤되는 상자 (.grid-host)
  * @param {object} opts
  * @param {{key:string, label:string, sub?:string, today?:boolean, past?:boolean}[]} opts.columns
  * @param {[number, number]} opts.slots  표시할 슬롯 범위 [시작, 끝)
- * @param {(key:string, slot:number) => {level:number|null, marks?:string[]}} opts.cell
+ * @param {(key:string, slot:number) => {level:number|null, marks?:string[], erasable?:boolean}} opts.cell
+ *   erasable 이 false 인 칸은 같은 색이어도 지우기로 바꾸지 않는다. (직접 칠한 칸이 아닌 경우 등)
  * @param {boolean} [opts.editable]
- * @param {() => number|null} [opts.brush]  현재 붓 (null = 지우개)
- * @param {(cells:{key:string, slot:number}[]) => void} [opts.onPaint]
+ * @param {() => number} [opts.brush]  현재 고른 색
+ * @param {(cells:{key:string, slot:number}[], level:number|null) => void} [opts.onPaint]  level 이 null 이면 지우기
  * @param {(key:string, slot:number, el:HTMLElement) => void} [opts.onSelect]
  */
 export function renderGrid(container, opts) {
@@ -82,6 +84,7 @@ export function renderGrid(container, opts) {
     let previewed = [];
     let pointer = null; // 마지막 포인터 위치
     let origin = null; // 드래그를 시작한 위치
+    let stroke = null; // 이번 드래그에서 칠할 값 (null = 지우기)
     let scrollFrame = 0;
     const tip = div('drag-tip');
 
@@ -109,12 +112,12 @@ export function renderGrid(container, opts) {
       const { c0, c1, s0, s1 } = bounds();
       const cols = c0 === c1 ? columns[c0].label : `${columns[c0].label}–${columns[c1].label}`;
       const count = (s1 - s0 + 1) * (c1 - c0 + 1);
-      return `${cols} ${slotLabel(s0)}–${slotLabel(s1 + 1)} · ${count}칸`;
+      return `${stroke === null ? '지우기 · ' : ''}${cols} ${slotLabel(s0)}–${slotLabel(s1 + 1)} · ${count}칸`;
     };
 
     const preview = () => {
       for (const el of previewed) el.classList.remove('preview', ...previewClasses);
-      const b = opts.brush();
+      const b = stroke;
       previewed = rect().map(({ ci, slot }) => cells[slot - from][ci]);
       for (const el of previewed) el.classList.add('preview', `pv-${b ?? 'erase'}`);
       tip.textContent = describe();
@@ -179,6 +182,10 @@ export function renderGrid(container, opts) {
       document.body.append(tip);
       pointer = origin = { x: e.clientX, y: e.clientY };
       anchor = current = hit;
+      // 고른 색과 같은 색 칸에서 시작하면 이번 드래그는 '지우기'
+      const start = opts.cell(columns[hit.ci].key, hit.slot);
+      const brush = opts.brush();
+      stroke = start.level === brush && start.erasable !== false ? null : brush;
       preview();
     });
 
@@ -204,7 +211,7 @@ export function renderGrid(container, opts) {
       const changed = apply ? rect().map(({ ci, slot }) => ({ key: columns[ci].key, slot })) : [];
       anchor = current = pointer = origin = null;
       previewed = [];
-      if (changed.length) opts.onPaint(changed);
+      if (changed.length) opts.onPaint(changed, stroke);
     };
     grid.addEventListener('pointerup', () => finish(true));
     grid.addEventListener('pointercancel', () => finish(false));

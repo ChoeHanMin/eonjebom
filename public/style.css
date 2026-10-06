@@ -532,9 +532,6 @@ button.icon {
   border: 1px solid rgb(0 0 0 / 0.08);
 }
 
-.swatch.eraser {
-  background: repeating-linear-gradient(45deg, var(--surface) 0 3px, var(--line-strong) 3px 4px);
-}
 
 .legend {
   display: flex;

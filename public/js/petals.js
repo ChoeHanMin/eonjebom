@@ -20,10 +20,10 @@ export function startPetals(canvas) {
   const makePetal = (anywhere) => ({
     x: rand(-20, width + 20),
     y: anywhere ? rand(-height, height) : rand(-60, -10),
-    size: rand(5, 11),
-    fall: rand(28, 70), // 초당 px
+    size: rand(10, 19),
+    fall: rand(32, 78), // 초당 px
     drift: rand(8, 26), // 바람에 옆으로 밀리는 정도
-    sway: rand(18, 46), // 좌우로 흔들리는 폭
+    sway: rand(22, 56), // 좌우로 흔들리는 폭
     phase: rand(0, Math.PI * 2),
     swaySpeed: rand(0.6, 1.4),
     rotation: rand(0, Math.PI * 2),
@@ -40,7 +40,7 @@ export function startPetals(canvas) {
     canvas.width = Math.round(width * dpr);
     canvas.height = Math.round(height * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const count = Math.round(Math.min(42, Math.max(14, (width * height) / 26000)));
+    const count = Math.round(Math.min(32, Math.max(12, (width * height) / 32000))); // 꽃잎이 큰 만큼 수는 조금 줄임
     while (petals.length < count) petals.push(makePetal(true));
     petals.length = count;
   };
@@ -60,8 +60,17 @@ export function startPetals(canvas) {
     ctx.lineTo(-s * 0.18, -s);
     ctx.bezierCurveTo(-s * 0.75, -s * 0.75, -s * 0.95, s * 0.45, 0, s);
     ctx.fillStyle = p.color;
-    ctx.globalAlpha = 0.9;
+    ctx.globalAlpha = 0.92;
     ctx.fill();
+    // 꽃잎이 커진 만큼 가장자리와 가운데 결을 살짝 그려 납작해 보이지 않게
+    ctx.lineWidth = 0.9;
+    ctx.strokeStyle = 'rgba(214, 120, 150, 0.45)';
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, s * 0.8);
+    ctx.lineTo(0, -s * 0.5);
+    ctx.strokeStyle = 'rgba(214, 120, 150, 0.25)';
+    ctx.stroke();
     ctx.restore();
   };
 
