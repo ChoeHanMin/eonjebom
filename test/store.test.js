@@ -20,7 +20,7 @@ test('시간표 코드: 인코딩 → 디코딩이 그대로 돌아온다', () =
   const weekly = Array.from({ length: 336 }, (_, i) => [null, 1, 2, 3][Math.floor(i / 7) % 4]);
   const window = Array.from({ length: 21 * 48 }, (_, i) => (i % 97 < 40 ? 3 : i % 5 === 0 ? null : 1));
   const code = encodeShareCode({ id: '0a1b2c3d', name: '최한민🙂', weekly, windowStart: MONDAY, window });
-  assert.match(code, /^EB1\.[A-Za-z0-9_-]+$/);
+  assert.match(code, /^EB2\.[A-Za-z0-9_-]+$/);
   const d = decodeShareCode(`카톡 메시지\n${code}\n끝`);
   assert.deepEqual(d, { id: '0a1b2c3d', name: '최한민🙂', weekly, windowStart: MONDAY, window });
 });
@@ -39,7 +39,26 @@ test('시간표 코드: 보통 시간표는 카톡으로 보낼 만한 길이다
     ]);
   }
   const code = store.shareCode();
-  assert.ok(code.length < 400, `코드 길이 ${code.length}`);
+  assert.ok(code.length < 100, `코드 길이 ${code.length}`);
+});
+
+test('시간표 코드: 기본 시간표와 다른 날만 따로 담고, 예전(v1) 코드도 읽는다', () => {
+  // 실제로 받은 v1 코드 (175자)
+  const v1 =
+    'EB1.ATnP3DwG7LGE7JuQUPsVF8sBRxJCA8sBQoBDEkIDywFHGcsBRwHuAO4A7hjLAUcSQgPLAUKAQxJCA8sBRxnLAUcB7gDuAO4YywFHEkIDywFCgEMSQgPLAUcZywFHAe4A7gDuGMsBRxJCA8sBQoBDEkIDywFHGcsBRwHuAO4A7gA';
+  const d = decodeShareCode(v1);
+  assert.equal(d.name, '채원');
+  assert.equal(d.window.length, 21 * 48);
+  const v2 = encodeShareCode(d);
+  assert.ok(v2.length < 80, `v2 길이 ${v2.length}`);
+  assert.deepEqual(decodeShareCode(v2), d);
+
+  // 하루만 다르면(날짜별 수정) 그 날만 더 담긴다
+  const window = [...d.window];
+  window[2 * 48 + 20] = 1; // 수요일 10시
+  const withChange = encodeShareCode({ ...d, window });
+  assert.deepEqual(decodeShareCode(withChange).window, window);
+  assert.ok(withChange.length < v2.length + 20);
 });
 
 test('시간표 코드: 잘린 코드나 다른 글은 알기 쉬운 오류를 낸다', () => {

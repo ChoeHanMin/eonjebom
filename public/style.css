@@ -916,6 +916,18 @@ button.icon {
   overflow-wrap: anywhere;
 }
 
+/* 비교 화면: 누구 시간표를 볼지 (위쪽 메뉴에 가리지 않게 스크롤 여백) */
+#view-card {
+  scroll-margin-top: 7.5rem;
+}
+
+.view-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.6rem 0 0.2rem;
+}
+
 /* ───────── 코드 붙여 넣기 / 펼치는 안내 ───────── */
 
 .add-friend {

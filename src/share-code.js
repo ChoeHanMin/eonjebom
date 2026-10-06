@@ -1,23 +1,27 @@
 // 서버 없이 시간표를 친구에게 보내기 위해, 시간표를 통째로 문자열 '시간표 코드'에 담는다.
 //
-// 형식: 'EB1.' + base64url(바이트)
-//   [0]     버전 (1)
+// 형식(v2): 'EB2.' + base64url(바이트)
+//   [0]     버전 (2)
 //   [1..4]  사람 id (임의 4바이트, 같은 사람이 새 코드를 보내면 이전 것을 바꾸는 데 씀)
 //   [5]     이름 길이 n (UTF-8 바이트, 최대 60)
 //   [6..]   이름
 //   다음 2  기간 시작일 (1970-01-01부터 며칠째, uint16)
 //   다음 1  기간 일수 d
-//   나머지  칸 값 스트림: 매주 기본 시간표 7×48칸 + 기간 d일×48칸(캘린더·날짜별 수정까지 반영한 실제 값)
+//   다음 ⌈d/8⌉  날짜별 표시: 1이면 그 날은 기본 시간표와 다름 (캘린더·날짜별 수정이 있는 날)
+//   나머지  칸 값 스트림: 매주 기본 시간표 7×48칸 + '다른 날'만 48칸씩
 //           연속된 같은 값을 1바이트로: (값 << 6) | (길이 - 1)  값 0 = 미입력, 1~3 = 가능도, 길이 1~64
 //
+// 대부분의 날은 기본 시간표와 같으므로, 같은 날은 1비트로 끝나 코드가 짧아진다.
 // 받은 쪽은 기간 안의 날짜는 실제 값을, 기간 밖의 날짜는 기본 시간표를 쓴다.
-import { SLOTS_PER_DAY, DAY_MS } from './time.js';
+// v1('EB1.', 기간의 모든 날을 그대로 담음)도 계속 읽을 수 있다.
+import { SLOTS_PER_DAY, DAY_MS, weekdayOf, addDays } from './time.js';
 
-export const CODE_PREFIX = 'EB1.';
-const VERSION = 1;
+export const CODE_PREFIX = 'EB2.';
+const VERSION = 2;
 const WEEKLY_SLOTS = 7 * SLOTS_PER_DAY;
 const MAX_NAME_BYTES = 60;
 const MAX_DAYS = 42;
+const BAD = '코드가 잘렸거나 바뀐 것 같아요. 다시 복사해 주세요.';
 
 /**
  * @param {object} p
@@ -37,20 +41,24 @@ export function encodeShareCode({ id, name, weekly, windowStart, window }) {
   const day = Math.round(Date.parse(`${windowStart}T00:00:00Z`) / DAY_MS);
   bytes.push(day >> 8, day & 0xff, days);
 
-  const values = [...weekly, ...window];
-  for (let i = 0; i < values.length; ) {
-    const v = values[i] ?? 0;
-    let len = 1;
-    while (len < 64 && i + len < values.length && (values[i + len] ?? 0) === v) len++;
-    bytes.push((v << 6) | (len - 1));
-    i += len;
+  // 기본 시간표와 다른 날만 골라 담는다.
+  const mask = new Array(Math.ceil(days / 8)).fill(0);
+  const values = [...weekly];
+  for (let d = 0; d < days; d++) {
+    const actual = window.slice(d * SLOTS_PER_DAY, (d + 1) * SLOTS_PER_DAY);
+    const base = weekdayOf(addDays(windowStart, d)) * SLOTS_PER_DAY;
+    if (actual.some((v, s) => (v ?? 0) !== (weekly[base + s] ?? 0))) {
+      mask[d >> 3] |= 1 << (d & 7);
+      values.push(...actual);
+    }
   }
+  bytes.push(...mask, ...runLengthEncode(values));
   return CODE_PREFIX + toBase64Url(Uint8Array.from(bytes));
 }
 
-/** 붙여 넣은 글(카톡 메시지 전체 등)에서 시간표 코드를 찾는다. */
+/** 붙여 넣은 글(카톡 메시지 전체, 링크 등)에서 시간표 코드를 찾는다. */
 export function findShareCode(text) {
-  const m = /EB1\.[A-Za-z0-9_-]{8,}/.exec(String(text ?? ''));
+  const m = /EB[12]\.[A-Za-z0-9_-]{8,}/.exec(String(text ?? ''));
   return m ? m[0] : null;
 }
 
@@ -59,41 +67,79 @@ export function findShareCode(text) {
  */
 export function decodeShareCode(text) {
   const code = findShareCode(text);
-  if (!code) throw new Error('시간표 코드를 찾지 못했어요. "EB1."로 시작하는 코드를 통째로 붙여 넣어 주세요.');
+  if (!code) throw new Error('시간표 코드를 찾지 못했어요. 친구가 보낸 메시지나 링크를 통째로 붙여 넣어 주세요.');
   let bytes;
   try {
-    bytes = fromBase64Url(code.slice(CODE_PREFIX.length));
+    bytes = fromBase64Url(code.slice(4));
   } catch {
-    throw new Error('코드가 잘렸거나 바뀐 것 같아요. 다시 복사해 주세요.');
+    throw new Error(BAD);
   }
-  const bad = () => new Error('코드가 잘렸거나 바뀐 것 같아요. 다시 복사해 주세요.');
   let p = 0;
   const take = (n) => {
-    if (p + n > bytes.length) throw bad();
+    if (p + n > bytes.length) throw new Error(BAD);
     const out = bytes.subarray(p, p + n);
     p += n;
     return out;
   };
-  if (take(1)[0] !== VERSION) throw new Error('이 앱이 모르는 버전의 코드예요. 앱을 새로고침해 보세요.');
+  const version = take(1)[0];
+  if (version !== 1 && version !== 2) throw new Error('이 앱이 모르는 버전의 코드예요. 앱을 새로고침해 보세요.');
+  if (String(version) !== code[2]) throw new Error(BAD);
   const id = bytesToHex(take(4));
   const nameLen = take(1)[0];
-  if (nameLen > MAX_NAME_BYTES) throw bad();
+  if (nameLen > MAX_NAME_BYTES) throw new Error(BAD);
   const name = new TextDecoder().decode(take(nameLen)).trim() || '이름 없음';
   const [hi, lo] = take(2);
   const windowStart = new Date(((hi << 8) | lo) * DAY_MS).toISOString().slice(0, 10);
   const days = take(1)[0];
-  if (days > MAX_DAYS) throw bad();
+  if (days > MAX_DAYS) throw new Error(BAD);
 
-  const total = WEEKLY_SLOTS + days * SLOTS_PER_DAY;
-  const values = [];
-  while (p < bytes.length) {
-    const b = bytes[p++];
-    const v = b >> 6;
-    const len = (b & 63) + 1;
-    for (let i = 0; i < len; i++) values.push(v === 0 ? null : v);
+  if (version === 1) {
+    const values = runLengthDecode(bytes.subarray(p));
+    if (values.length !== WEEKLY_SLOTS + days * SLOTS_PER_DAY) throw new Error(BAD);
+    return { id, name, weekly: values.slice(0, WEEKLY_SLOTS), windowStart, window: values.slice(WEEKLY_SLOTS) };
   }
-  if (values.length !== total) throw bad();
-  return { id, name, weekly: values.slice(0, WEEKLY_SLOTS), windowStart, window: values.slice(WEEKLY_SLOTS) };
+
+  const mask = take(Math.ceil(days / 8));
+  const differs = (d) => (mask[d >> 3] >> (d & 7)) & 1;
+  let changed = 0;
+  for (let d = 0; d < days; d++) changed += differs(d);
+  const values = runLengthDecode(bytes.subarray(p));
+  if (values.length !== WEEKLY_SLOTS + changed * SLOTS_PER_DAY) throw new Error(BAD);
+
+  const weekly = values.slice(0, WEEKLY_SLOTS);
+  const window = [];
+  let next = WEEKLY_SLOTS;
+  for (let d = 0; d < days; d++) {
+    if (differs(d)) {
+      window.push(...values.slice(next, next + SLOTS_PER_DAY));
+      next += SLOTS_PER_DAY;
+    } else {
+      const base = weekdayOf(addDays(windowStart, d)) * SLOTS_PER_DAY;
+      window.push(...weekly.slice(base, base + SLOTS_PER_DAY));
+    }
+  }
+  return { id, name, weekly, windowStart, window };
+}
+
+function runLengthEncode(values) {
+  const out = [];
+  for (let i = 0; i < values.length; ) {
+    const v = values[i] ?? 0;
+    let len = 1;
+    while (len < 64 && i + len < values.length && (values[i + len] ?? 0) === v) len++;
+    out.push((v << 6) | (len - 1));
+    i += len;
+  }
+  return out;
+}
+
+function runLengthDecode(bytes) {
+  const values = [];
+  for (const b of bytes) {
+    const v = b >> 6;
+    for (let i = 0; i <= (b & 63); i++) values.push(v === 0 ? null : v);
+  }
+  return values;
 }
 
 // ── 바이트 유틸 (브라우저와 Node 모두에서 동작) ──

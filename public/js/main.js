@@ -38,6 +38,7 @@ const state = {
   minSlots: 2,
   minLevel: 2,
   incomingCode: null, // '#c=코드' 링크로 들어온 경우
+  view: 'all', // 비교 화면에서 볼 시간표: 'all'(모두 함께) 또는 사람 id
 };
 
 const VIEWS = {
@@ -162,13 +163,11 @@ async function copyText(text, message = '복사했어요. 카톡 등에 붙여 �
 
 function shareMessage() {
   const code = store.shareCode();
-  const link = EMBEDDED ? '' : `\n${location.origin}${location.pathname}#c=${code}`;
-  return {
-    code,
-    text:
-      `${store.me.name}의 언제봄 시간표예요. 언제봄의 '친구 코드 추가'에 이 메시지를 통째로 붙여 넣으면 언제 같이 되는지 볼 수 있어요.\n` +
-      `${code}${link}`,
-  };
+  // 링크 안에 코드가 들어 있으므로, 링크를 쓸 수 있으면 코드를 따로 적지 않는다. (링크를 붙여 넣어도 코드로 인식됨)
+  const text = EMBEDDED
+    ? `${store.me.name}의 언제봄 시간표 코드예요. 언제봄의 '친구 코드 추가'에 붙여 넣어 주세요.\n${code}`
+    : `${store.me.name}의 언제봄 시간표예요. 눌러서 언제 같이 되는지 확인해 봐!\n${location.origin}${location.pathname}#c=${code}`;
+  return { code, text };
 }
 
 /** 휴대폰에서는 공유 창(카톡 등)을, 그 외에는 복사를 쓴다. */
@@ -330,7 +329,7 @@ function renderWelcome(notice) {
     placeholder: '예: 한민',
     autocomplete: 'nickname',
   });
-  const restoreInput = h('textarea', { id: 'restore-code', rows: '3', placeholder: 'EB1.… 로 시작하는 내 시간표 코드' });
+  const restoreInput = h('textarea', { id: 'restore-code', rows: '3', placeholder: '내 시간표 코드나 링크' });
 
   const form = h(
     'form.card.start-card',
@@ -582,7 +581,7 @@ function renderCompare(root) {
   const codeInput = h('textarea.code-input', {
     id: 'friend-code',
     rows: '2',
-    placeholder: '친구가 보낸 메시지나 코드(EB1.…)를 통째로 붙여 넣으세요',
+    placeholder: '친구가 보낸 메시지·링크·코드를 통째로 붙여 넣으세요',
     autocomplete: 'off',
     spellcheck: false,
     required: true,
@@ -596,8 +595,10 @@ function renderCompare(root) {
         const added = attempt(() => store.addFriend(codeInput.value));
         if (!added) return;
         state.selected.add(added.id);
+        state.view = added.id; // 추가한 친구의 시간표를 바로 보여 준다
         toast(added.updated ? `${added.name} 님의 시간표를 새로 바꿨어요.` : `${added.name} 님을 추가했어요.`, 'success');
         rerender();
+        document.getElementById('view-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       },
     },
     codeInput,
@@ -737,6 +738,31 @@ function renderCompare(root) {
   const stale = friends.filter((f) => state.selected.has(f.id) && f.validUntil < weekEnd);
 
   const myEmpty = data.dates.every((d) => data.cells[d].every((c) => c.levels[0] === null));
+
+  // 볼 시간표: 모두 함께(가장 바쁜 사람 기준) 또는 한 사람
+  const viewIndex = data.people.findIndex((p) => p.id === state.view);
+  if (viewIndex < 0) state.view = 'all';
+  const viewName = viewIndex < 0 ? null : names[viewIndex];
+  const viewLevel = (date, slot) => (viewIndex < 0 ? data.cells[date][slot].level : data.cells[date][slot].levels[viewIndex]);
+  const viewSwitch = h(
+    'div.view-switch',
+    { role: 'group', 'aria-label': '볼 시간표' },
+    [{ id: 'all', label: '모두 함께' }, ...data.people.map((p, i) => ({ id: p.id, label: names[i] }))].map((o) =>
+      h(
+        'button.chip',
+        {
+          type: 'button',
+          'aria-pressed': String(state.view === o.id || (o.id === 'all' && viewIndex < 0)),
+          onClick: () => {
+            state.view = o.id;
+            rerender();
+            document.getElementById('view-card')?.scrollIntoView({ block: 'start' });
+          },
+        },
+        o.label,
+      ),
+    ),
+  );
   const detail = h('div.detail', { 'aria-live': 'polite' }, h('p.hint', {}, '칸을 누르면 각자 상태를 볼 수 있어요.'));
   const showDetail = (date, slot) => {
     const cell = data.cells[date][slot];
@@ -781,7 +807,11 @@ function renderCompare(root) {
             'section.card.notice-card',
             {},
             h('strong', {}, '아직 이 주의 내 시간을 채우지 않았어요.'),
-            h('p', {}, '내 시간이 비어 있으면 같이 되는 시간을 찾을 수 없어요.'),
+            h(
+              'p',
+              {},
+              '내 시간이 비어 있으면 같이 되는 시간을 찾을 수 없어요. 친구 시간표는 아래에서 친구 이름을 누르면 볼 수 있어요.',
+            ),
             h(
               'div.actions',
               {},
@@ -800,25 +830,43 @@ function renderCompare(root) {
       h('section.card', {}, h('h2', {}, `${names.join(' · ')} 추천 시간`), suggestions),
       h(
         'section.card',
-        {},
+        { id: 'view-card' },
         h(
           'div.card-head',
           {},
-          h('h2', {}, '함께 보기'),
-          saveImageButton(() => ({
-            title: `${names.join(' · ')} 언제 봄?`,
-            subtitle: `${formatDate(data.dates[0])} – ${formatDate(weekEnd)} · 가장 바쁜 사람 기준`,
-            notes: data.suggestions
-              .slice(0, 3)
-              .map((s, i) => `추천 ${i + 1}. ${formatDate(s.date)} ${slotLabel(s.startSlot)}–${slotLabel(s.endSlot)}`),
-            columns: dateColumns(data.dates),
-            slots: visibleSlots(),
-            cell: (date, slot) => ({ level: data.cells[date][slot].level }),
-            filename: `eonjebom-together-${data.dates[0]}.png`,
-          })),
+          h('h2', {}, viewName ? `${viewName === '나' ? '내' : `${viewName}의`} 시간표` : '함께 보기'),
+          saveImageButton(() =>
+            viewName
+              ? {
+                  title: `${viewName === '나' ? store.me.name : viewName}의 시간표`,
+                  subtitle: `${formatDate(data.dates[0])} – ${formatDate(weekEnd)}`,
+                  columns: dateColumns(data.dates),
+                  slots: visibleSlots(),
+                  cell: (date, slot) => ({ level: viewLevel(date, slot) }),
+                  filename: `eonjebom-person-${data.dates[0]}.png`,
+                }
+              : {
+                  title: `${names.join(' · ')} 언제 봄?`,
+                  subtitle: `${formatDate(data.dates[0])} – ${formatDate(weekEnd)} · 가장 바쁜 사람 기준`,
+                  notes: data.suggestions
+                    .slice(0, 3)
+                    .map((s, i) => `추천 ${i + 1}. ${formatDate(s.date)} ${slotLabel(s.startSlot)}–${slotLabel(s.endSlot)}`),
+                  columns: dateColumns(data.dates),
+                  slots: visibleSlots(),
+                  cell: (date, slot) => ({ level: viewLevel(date, slot) }),
+                  filename: `eonjebom-together-${data.dates[0]}.png`,
+                },
+          ),
         ),
+        viewSwitch,
         h('div.toolbar', {}, hoursToggle(rerender)),
-        h('p.hint', {}, '각 칸은 가장 바쁜 사람 기준이에요. 한 명이라도 입력하지 않은 칸은 회색이에요.'),
+        h(
+          'p.hint',
+          {},
+          viewName
+            ? `${viewName === '나' ? '내' : `${viewName} 님이 보낸`} 시간표 그대로예요. 위에서 '모두 함께'를 누르면 같이 되는 시간을 볼 수 있어요.`
+            : '각 칸은 가장 바쁜 사람 기준이에요. 한 명이라도 입력하지 않은 칸은 회색이에요. 위에서 이름을 누르면 그 사람 시간표만 볼 수 있어요.',
+        ),
         legend(),
         gridHost,
         detail,
@@ -829,7 +877,7 @@ function renderCompare(root) {
   renderGrid(gridHost, {
     columns: dateColumns(data.dates),
     slots: visibleSlots(),
-    cell: (date, slot) => ({ level: data.cells[date][slot].level }),
+    cell: (date, slot) => ({ level: viewLevel(date, slot) }),
     onSelect: (date, slot) => showDetail(date, slot),
   });
 }
