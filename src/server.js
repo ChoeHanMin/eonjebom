@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { openDb } from './db.js';
-import { createApp } from './app.js';
+import { createApp, deleteInactiveProfiles } from './app.js';
 import { syncDueSources } from './calendars.js';
 
 if (existsSync('.env')) process.loadEnvFile('.env');
@@ -28,12 +28,14 @@ const server = app.listen(port, () => {
   if (!config.googleClientId) console.log('  (GOOGLE_CLIENT_ID 미설정: 구글 캘린더 연동 버튼이 비활성화됩니다)');
 });
 
-// 연동된 캘린더를 주기적으로 다시 가져오고, 만료된 로그인 세션을 정리한다.
+// 연동된 캘린더를 주기적으로 다시 가져오고, 90일 동안 쓰지 않은 시간표를 지운다.
 const SYNC_INTERVAL_MS = 30 * 60 * 1000;
 const SYNC_MAX_AGE_MS = 3 * 60 * 60 * 1000;
 setInterval(async () => {
   try {
-    db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(Date.now());
+    const removed = deleteInactiveProfiles(db);
+    if (removed) console.log(`[cleanup] 오래된 시간표 ${removed}개 삭제`);
+    db.prepare('DELETE FROM oauth_states WHERE expires_at < ?').run(Date.now());
     await syncDueSources(db, { ...config, fetch: globalThis.fetch }, { maxAgeMs: SYNC_MAX_AGE_MS });
   } catch (err) {
     console.error('[sync] 주기 동기화 실패:', err);

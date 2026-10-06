@@ -1,17 +1,16 @@
 // 가능 여부 계산의 핵심 로직. DB나 HTTP와 무관한 순수 함수만 둔다.
 import { SLOTS_PER_DAY, DAY_MS, SLOT_MS, dayStartMs, weekdayOf, slotStartMs } from './time.js';
 
-// 5단계 가능도. 숫자가 클수록 좋다. null = 미입력.
+// 3단계 가능도. 숫자가 클수록 좋다. null = 미입력.
 export const LEVELS = Object.freeze({
-  GREAT: 5, // 아주 좋음
-  GOOD: 4, // 좋음
-  MAYBE: 3, // 애매함
-  RATHER_NOT: 2, // 웬만하면 안 됨
-  NO: 1, // 안 됨
+  FREE: 3, // 한가함
+  MAYBE: 2, // 잘 모르겠음
+  BUSY: 1, // 바쁨
 });
+export const MAX_LEVEL = LEVELS.FREE;
 
 export function isLevel(v) {
-  return Number.isInteger(v) && v >= 1 && v <= 5;
+  return Number.isInteger(v) && v >= LEVELS.BUSY && v <= MAX_LEVEL;
 }
 
 export function isSlot(v) {
@@ -88,22 +87,22 @@ export function combineSchedules(dates, schedules) {
 
 /**
  * 합친 일정에서 함께 만나기 좋은 시간대를 추천한다.
- * 기준 가능도(5 → minLevel) 별로 연속 구간을 찾고, 좋은 순 → 긴 순 → 빠른 순으로 정렬한다.
+ * 기준 가능도(한가함 → minLevel) 별로 연속 구간을 찾고, 좋은 순 → 긴 순 → 빠른 순으로 정렬한다.
  *
  * @param {string[]} dates
  * @param {Record<string, {level:number|null}[]>} combined
  * @param {object} [opts]
  * @param {number} [opts.minSlots=2]  최소 길이 (슬롯 수, 기본 1시간)
- * @param {number} [opts.minLevel=3]  이 가능도 이상만 추천
+ * @param {number} [opts.minLevel=2]  이 가능도 이상만 추천
  * @param {number} [opts.limit=10]
  * @param {number} [opts.notBefore]  이 시각(epoch ms) 이전에 시작하는 슬롯은 제외
  */
 export function suggestTimes(dates, combined, opts = {}) {
-  const { minSlots = 2, minLevel = 3, limit = 10, notBefore = -Infinity } = opts;
+  const { minSlots = 2, minLevel = LEVELS.MAYBE, limit = 10, notBefore = -Infinity } = opts;
   const seen = new Set();
   const found = [];
 
-  for (let threshold = 5; threshold >= minLevel; threshold--) {
+  for (let threshold = MAX_LEVEL; threshold >= minLevel; threshold--) {
     for (const date of dates) {
       const cells = combined[date];
       let runStart = null;

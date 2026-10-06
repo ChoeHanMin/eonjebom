@@ -1,10 +1,8 @@
-// 5단계 가능도 정의 (서버의 src/availability.js 와 같은 값)
+// 3단계 가능도 (서버의 src/availability.js 와 같은 값)
 export const LEVELS = [
-  { value: 5, label: '아주 좋음', short: '아주 좋음' },
-  { value: 4, label: '좋음', short: '좋음' },
-  { value: 3, label: '애매함', short: '애매함' },
-  { value: 2, label: '웬만하면 안 됨', short: '웬만하면 X' },
-  { value: 1, label: '안 됨', short: '안 됨' },
+  { value: 3, label: '한가함' },
+  { value: 2, label: '잘 모르겠음' },
+  { value: 1, label: '바쁨' },
 ];
 
 export function levelLabel(level) {
@@ -50,4 +48,10 @@ export function formatDate(dateStr) {
 export function shortDate(dateStr) {
   const [, m, d] = dateStr.split('-').map(Number);
   return `${m}/${d}`;
+}
+
+// ── 공유 코드 ──
+
+export function formatCode(code) {
+  return code ? `${code.slice(0, 4)}-${code.slice(4)}` : '';
 }

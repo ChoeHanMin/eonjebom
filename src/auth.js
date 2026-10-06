@@ -1,50 +1,32 @@
-import { randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
+import { randomBytes, randomInt, createHash } from 'node:crypto';
 
-export const SESSION_COOKIE = 'eb_session';
-export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+// 공유 코드에 쓰는 글자. 헷갈리기 쉬운 0/O, 1/I/L 은 뺐다. (31자 → 8자리 약 8,500억 가지)
+export const CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+export const CODE_LENGTH = 8;
 
-export function hashPassword(password) {
-  const salt = randomBytes(16);
-  const hash = scryptSync(password, salt, 64);
-  return `scrypt$${salt.toString('hex')}$${hash.toString('hex')}`;
+export function generateShareCode() {
+  let code = '';
+  for (let i = 0; i < CODE_LENGTH; i++) code += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
+  return code;
 }
 
-export function verifyPassword(password, stored) {
-  const [scheme, saltHex, hashHex] = stored.split('$');
-  if (scheme !== 'scrypt') return false;
-  const expected = Buffer.from(hashHex, 'hex');
-  const actual = scryptSync(password, Buffer.from(saltHex, 'hex'), expected.length);
-  return timingSafeEqual(actual, expected);
+/** 사용자가 입력한 코드를 정규화한다. ('k7qm-3xpa' → 'K7QM3XPA') 형식이 틀리면 null. */
+export function normalizeShareCode(input) {
+  const code = String(input ?? '')
+    .toUpperCase()
+    .replace(/[\s-]/g, '');
+  if (code.length !== CODE_LENGTH) return null;
+  for (const ch of code) if (!CODE_ALPHABET.includes(ch)) return null;
+  return code;
+}
+
+/** 수정 권한 토큰. 브라우저에 저장되고, '수정 링크'로 다른 기기에 옮길 수 있다. 서버에는 해시만 저장한다. */
+export function generateEditToken() {
+  return randomBytes(32).toString('base64url');
 }
 
 export function hashToken(token) {
   return createHash('sha256').update(token).digest('hex');
-}
-
-export function createSession(db, userId, now = Date.now()) {
-  const token = randomBytes(32).toString('base64url');
-  db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)').run(
-    hashToken(token),
-    userId,
-    now + SESSION_TTL_MS,
-  );
-  return token;
-}
-
-export function findSessionUser(db, token, now = Date.now()) {
-  if (!token) return null;
-  const row = db
-    .prepare(
-      `SELECT u.id, u.username, u.display_name AS displayName
-         FROM sessions s JOIN users u ON u.id = s.user_id
-        WHERE s.token_hash = ? AND s.expires_at > ?`,
-    )
-    .get(hashToken(token), now);
-  return row ? { ...row } : null;
-}
-
-export function deleteSession(db, token) {
-  if (token) db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(hashToken(token));
 }
 
 export function parseCookies(header = '') {
@@ -62,7 +44,7 @@ export function parseCookies(header = '') {
   return out;
 }
 
-/** 아주 단순한 메모리 기반 시도 횟수 제한 (로그인 무차별 대입 방지용) */
+/** 아주 단순한 메모리 기반 횟수 제한 (코드 무작위 대입, 대량 생성 방지용) */
 export function createRateLimiter({ max, windowMs }) {
   const hits = new Map();
   return {
@@ -77,6 +59,11 @@ export function createRateLimiter({ max, windowMs }) {
       }
       entry.count++;
       return entry.count > max;
+    },
+    /** 횟수를 늘리지 않고, 이미 한도에 도달했는지만 본다. */
+    blocked(key, now = Date.now()) {
+      const entry = hits.get(key);
+      return Boolean(entry && entry.resetAt > now && entry.count >= max);
     },
   };
 }

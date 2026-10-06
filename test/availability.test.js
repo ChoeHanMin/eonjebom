@@ -20,17 +20,17 @@ test('날짜 유틸: 요일, 주 시작, KST 경계', () => {
 
 test('우선순위: 직접 입력 > 캘린더 > 기본 시간표 > 미입력', () => {
   const weekly = new Map([
-    ['0:20', 5],
-    ['0:21', 5],
-    ['0:22', 5],
+    ['0:20', 3],
+    ['0:21', 3],
+    ['0:22', 3],
   ]);
-  const overrides = new Map([[`${DATE}:22`, 3]]);
+  const overrides = new Map([[`${DATE}:22`, 2]]);
   // 10:30 ~ 11:10 KST 일정 → 슬롯 21, 22 에 걸침
   const busy = [{ start: slotStartMs(DATE, 21), end: slotStartMs(DATE, 22) + 10 * 60 * 1000, level: 1 }];
   const s = buildSchedule({ dates: [DATE], weekly, overrides, busy })[DATE];
-  assert.deepEqual(s[20], { level: 5, source: 'weekly' });
+  assert.deepEqual(s[20], { level: 3, source: 'weekly' });
   assert.deepEqual(s[21], { level: 1, source: 'calendar' });
-  assert.deepEqual(s[22], { level: 3, source: 'override' });
+  assert.deepEqual(s[22], { level: 2, source: 'override' });
   assert.deepEqual(s[23], { level: null, source: null });
 });
 
@@ -58,36 +58,37 @@ function scheduleFrom(levels) {
   return { [DATE]: cells };
 }
 
-test('합치기: 가장 나쁜 사람 기준, 한 명이라도 미입력이면 미입력', () => {
-  const me = scheduleFrom({ 10: 5, 11: 4, 12: 5 });
-  const you = scheduleFrom({ 10: 3, 11: 5 });
+test('합치기: 가장 바쁜 사람 기준, 한 명이라도 미입력이면 미입력', () => {
+  const me = scheduleFrom({ 10: 3, 11: 3, 12: 3 });
+  const you = scheduleFrom({ 10: 2, 11: 3 });
   const c = combineSchedules([DATE], [me, you])[DATE];
-  assert.equal(c[10].level, 3);
-  assert.equal(c[11].level, 4);
+  assert.equal(c[10].level, 2);
+  assert.equal(c[11].level, 3);
   assert.equal(c[12].level, null);
-  assert.deepEqual(c[10].levels, [5, 3]);
+  assert.deepEqual(c[10].levels, [3, 2]);
 });
 
-test('추천: 좋은 시간대가 먼저, 너무 짧은 구간과 지난 시간은 제외', () => {
+test('추천: 한가한 시간대가 먼저, 너무 짧은 구간과 지난 시간은 제외', () => {
   const combined = combineSchedules(
     [DATE],
-    [scheduleFrom({ 20: 5, 21: 5, 22: 3, 23: 3, 24: 3, 30: 5, 40: 4, 41: 4 })],
+    [scheduleFrom({ 20: 3, 21: 3, 22: 2, 23: 2, 24: 2, 30: 3, 40: 1, 41: 1 })],
   );
   const all = suggestTimes([DATE], combined, { minSlots: 2 });
   assert.deepEqual(
     all.map((s) => [s.startSlot, s.endSlot, s.minLevel]),
     [
-      [20, 22, 5],
-      [40, 42, 4],
-      [20, 25, 3],
+      [20, 22, 3],
+      [20, 25, 2],
     ],
+  );
+  // '한가함만' 기준이면 잘 모르겠음 구간은 빠진다
+  assert.deepEqual(
+    suggestTimes([DATE], combined, { minSlots: 2, minLevel: 3 }).map((s) => [s.startSlot, s.endSlot]),
+    [[20, 22]],
   );
   const later = suggestTimes([DATE], combined, { minSlots: 2, notBefore: slotStartMs(DATE, 21) });
   assert.deepEqual(
     later.map((s) => [s.startSlot, s.endSlot]),
-    [
-      [40, 42],
-      [21, 25],
-    ],
+    [[21, 25]],
   );
 });

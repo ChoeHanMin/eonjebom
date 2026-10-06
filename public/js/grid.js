@@ -132,7 +132,7 @@ export function renderGrid(container, opts) {
   return { update };
 }
 
-const previewClasses = ['pv-1', 'pv-2', 'pv-3', 'pv-4', 'pv-5', 'pv-erase'];
+const previewClasses = ['pv-1', 'pv-2', 'pv-3', 'pv-erase'];
 
 function div(className) {
   const d = document.createElement('div');

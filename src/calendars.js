@@ -46,8 +46,8 @@ export async function syncSource(db, source, config, now = Date.now()) {
     const busy = mergeIntervals(await loadBusy(source, config, syncWindow(now)));
     transaction(db, () => {
       db.prepare('DELETE FROM calendar_busy WHERE source_id = ?').run(source.id);
-      const insert = db.prepare('INSERT INTO calendar_busy (source_id, user_id, start_ms, end_ms) VALUES (?, ?, ?, ?)');
-      for (const b of busy) insert.run(source.id, source.user_id, b.start, b.end);
+      const insert = db.prepare('INSERT INTO calendar_busy (source_id, profile_id, start_ms, end_ms) VALUES (?, ?, ?, ?)');
+      for (const b of busy) insert.run(source.id, source.profile_id, b.start, b.end);
       db.prepare('UPDATE calendar_sources SET last_synced_at = ?, last_error = NULL WHERE id = ?').run(now, source.id);
     });
     return null;
