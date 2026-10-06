@@ -73,6 +73,12 @@ npm start              # http://localhost:3000
 npm test
 ```
 
+### 서버 없이 미리보기
+
+`npm run build:preview` 를 실행하면 `dist/preview.html` 하나에 앱 전체가 담긴 **미리보기판**이 만들어져요.
+서버 대신 `preview/mock-api.js` 가 브라우저 안에서 API를 흉내 내고(일정 계산은 서버와 같은 코드), 예시 친구 2명(지우, 민수)이 들어 있어요.
+데이터는 그 브라우저에만 저장되므로 코드 공유와 캘린더 연동은 되지 않아요.
+
 ## 배포 (Fly.io)
 
 `main` 브랜치에 코드가 올라가면 GitHub Actions가 테스트를 돌리고, 통과하면 [Fly.io](https://fly.io)에 자동으로 배포해요.

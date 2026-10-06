@@ -16,6 +16,8 @@ import {
 } from './levels.js';
 
 const app = document.getElementById('app');
+// 서버 없이 브라우저 안에서만 돌아가는 미리보기판인지 (preview/mock-api.js 가 켠다)
+const PREVIEW = Boolean(window.EONJEBOM_PREVIEW);
 
 const state = {
   profile: null,
@@ -121,6 +123,51 @@ function handleError(err) {
   toast(err.message || '문제가 발생했어요.', 'error');
 }
 
+/**
+ * 앱 안에서 띄우는 확인 창. (브라우저 기본 confirm 창은 일부 환경에서 막혀 있다)
+ * @returns {Promise<boolean>}
+ */
+function ask({ title, detail, okLabel = '확인', cancelLabel = '취소', danger = false, content = null }) {
+  return new Promise((resolve) => {
+    const dlg = h('dialog.dialog', { 'aria-label': title });
+    const close = (value) => {
+      dlg.close();
+      dlg.remove();
+      resolve(value);
+    };
+    dlg.append(
+      h(
+        'div.dialog-body',
+        {},
+        h('p.dialog-title', {}, title),
+        detail ? h('p.hint', {}, detail) : null,
+        content,
+        h(
+          'div.dialog-actions',
+          {},
+          cancelLabel ? h('button', { type: 'button', onClick: () => close(false) }, cancelLabel) : null,
+          h(`button.${danger ? 'danger-fill' : 'primary'}`, { type: 'button', onClick: () => close(true) }, okLabel),
+        ),
+      ),
+    );
+    dlg.addEventListener('cancel', (e) => {
+      e.preventDefault();
+      close(false);
+    });
+    document.body.append(dlg);
+    dlg.showModal();
+  });
+}
+
+/** 클립보드 복사가 막혔을 때: 내용을 창에 띄워 직접 복사하게 한다. */
+function showCopyable(text) {
+  const area = h('textarea.copy-area', { readonly: true, rows: '4', 'aria-label': '복사할 내용' }, text);
+  const done = ask({ title: '아래 내용을 길게 눌러 복사하세요', content: area, okLabel: '닫기', cancelLabel: null });
+  area.focus();
+  area.select();
+  return done;
+}
+
 /** 휴대폰에서는 공유 창(카톡 등)을, 그 외에는 클립보드 복사를 쓴다. */
 async function shareOrCopy({ title, text, url }, copiedMessage = '복사했어요. 원하는 곳에 붙여 넣으세요.') {
   if (navigator.share) {
@@ -136,13 +183,22 @@ async function shareOrCopy({ title, text, url }, copiedMessage = '복사했어�
     toast(copiedMessage, 'success');
     return true;
   } catch {
-    prompt('아래 내용을 복사하세요.', url ? `${text}\n${url}` : text);
+    await showCopyable(url ? `${text}\n${url}` : text);
     return true;
   }
 }
 
 function shareMyCode() {
   const code = state.profile.code;
+  if (PREVIEW) {
+    return ask({
+      title: `내 코드 ${formatCode(code)}`,
+      detail:
+        '미리보기에서는 데이터가 이 브라우저에만 있어서 친구에게 코드를 보낼 수 없어요. 대신 예시 친구(지우, 민수)와 비교해 보세요. 실제 배포 후에는 이 버튼으로 카톡 등에 링크를 보낼 수 있어요.',
+      okLabel: '알겠어요',
+      cancelLabel: null,
+    });
+  }
   return shareOrCopy({
     title: '언제봄',
     text: `언제봄에서 나랑 언제 시간 되는지 맞춰 보자! 내 코드: ${formatCode(code)}`,
@@ -155,6 +211,7 @@ function editLink() {
 }
 
 async function saveEditLink() {
+  if (PREVIEW) return toast('미리보기에서는 수정 링크를 쓸 수 없어요. 실제 배포 후에 쓸 수 있어요.');
   const done = await shareOrCopy(
     {
       title: '언제봄 수정 링크 (나만 보관)',
@@ -200,8 +257,17 @@ function saveImageButton(getOptions) {
         const btn = e.currentTarget;
         btn.disabled = true;
         try {
-          const result = await saveGridImage(getOptions());
+          const { result, url } = await saveGridImage(getOptions());
           if (result === 'downloaded') toast('이미지를 저장했어요. (다운로드 폴더)', 'success');
+          if (result === 'show') {
+            await ask({
+              title: '이미지를 길게 눌러 저장하세요',
+              detail: 'PC에서는 마우스 오른쪽 버튼 › 이미지 저장을 누르세요.',
+              content: h('img.saved-image', { src: url, alt: '시간표 이미지' }),
+              okLabel: '닫기',
+              cancelLabel: null,
+            });
+          }
         } catch (err) {
           toast(err.message || '이미지를 저장하지 못했어요.', 'error');
         } finally {
@@ -409,7 +475,7 @@ function renderShell() {
   const view = currentView();
   const content = h('main.content', { id: 'content' });
   const banner =
-    loadPref('linkSaved') !== '1'
+    !PREVIEW && loadPref('linkSaved') !== '1'
       ? h(
           'div.link-banner',
           {},
@@ -1097,9 +1163,9 @@ async function renderCalendars(root) {
                     'button.small.danger',
                     {
                       type: 'button',
-                      onClick: () => {
-                        if (confirm(`'${c.name}' 연동을 해제할까요?`))
-                          api.del(`/api/calendars/${c.id}`).then(rerender).catch(handleError);
+                      onClick: async () => {
+                        if (!(await ask({ title: `'${c.name}' 연동을 해제할까요?`, okLabel: '해제', danger: true }))) return;
+                        api.del(`/api/calendars/${c.id}`).then(rerender).catch(handleError);
                       },
                     },
                     '해제',
@@ -1177,8 +1243,12 @@ async function renderMe(root) {
           {
             type: 'button',
             onClick: async () => {
-              if (!confirm('새 수정 링크를 만들까요? 이전 링크와, 이전 링크로 연결한 다른 기기에서는 더 이상 고칠 수 없어요.'))
-                return;
+              const ok = await ask({
+                title: '새 수정 링크를 만들까요?',
+                detail: '이전 링크와, 이전 링크로 연결한 다른 기기에서는 더 이상 고칠 수 없어요.',
+                okLabel: '새로 만들기',
+              });
+              if (!ok) return;
               try {
                 const { editToken } = await api.post('/api/me/edit-token');
                 setToken(editToken);
@@ -1208,7 +1278,13 @@ async function renderMe(root) {
         {
           type: 'button',
           onClick: async () => {
-            if (!confirm('내 시간표와 연동한 캘린더 정보를 모두 지울까요? 되돌릴 수 없어요.')) return;
+            const ok = await ask({
+              title: '내 시간표를 모두 지울까요?',
+              detail: '연동한 캘린더 정보도 함께 지워지고, 되돌릴 수 없어요.',
+              okLabel: '모두 삭제',
+              danger: true,
+            });
+            if (!ok) return;
             try {
               await api.del('/api/me');
               setToken(null);

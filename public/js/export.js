@@ -32,10 +32,12 @@ const HEAD_H = 44;
  * @param {[number, number]} opts.slots
  * @param {(key:string, slot:number) => {level:number|null, marks?:string[]}} opts.cell
  * @param {string} opts.filename  영문으로 (한글 파일 이름은 일부 브라우저에서 무시됨)
- * @returns {Promise<'shared'|'downloaded'|'cancelled'>}
+ * @returns {Promise<{result: 'shared'|'downloaded'|'cancelled'|'show', url?: string}>}
+ *   'show' 이면 파일 저장이 막힌 환경(미리보기)이라, url 의 이미지를 화면에 띄워 길게 눌러 저장하게 한다.
  */
 export async function saveGridImage(opts) {
   const canvas = drawGrid(opts);
+  if (window.EONJEBOM_PREVIEW) return { result: 'show', url: canvas.toDataURL('image/png') };
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
   if (!blob) throw new Error('이미지를 만들지 못했어요.');
   const file = new File([blob], opts.filename, { type: 'image/png' });
@@ -44,9 +46,9 @@ export async function saveGridImage(opts) {
   if (isTouchDevice() && navigator.canShare?.({ files: [file] })) {
     try {
       await navigator.share({ files: [file], title: opts.title });
-      return 'shared';
+      return { result: 'shared' };
     } catch (err) {
-      if (err?.name === 'AbortError') return 'cancelled';
+      if (err?.name === 'AbortError') return { result: 'cancelled' };
       // 공유가 막힌 환경이면 다운로드로 대신한다.
     }
   }
@@ -59,7 +61,7 @@ export async function saveGridImage(opts) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
-  return 'downloaded';
+  return { result: 'downloaded' };
 }
 
 function isTouchDevice() {

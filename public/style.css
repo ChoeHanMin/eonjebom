@@ -22,7 +22,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --lv-none: #3a3f38;
     --bg: #141713;
     --surface: #1d211c;
@@ -36,6 +36,22 @@
     --accent-text: #0b1a10;
     color-scheme: dark;
   }
+}
+
+/* 보는 곳(예: 미리보기)에서 테마를 직접 고른 경우 */
+:root[data-theme='dark'] {
+  --lv-none: #3a3f38;
+  --bg: #141713;
+  --surface: #1d211c;
+  --text: #e9ece6;
+  --muted: #9ba396;
+  --line: #2e342c;
+  --line-strong: #444c41;
+  --grid-line: rgb(0 0 0 / 0.55);
+  --grid-hour: rgb(255 255 255 / 0.16);
+  --accent: #22c55e;
+  --accent-text: #0b1a10;
+  color-scheme: dark;
 }
 
 * {
@@ -157,7 +173,7 @@ button.icon {
 
 .topbar {
   position: sticky;
-  top: 0;
+  top: env(safe-area-inset-top, 0px);
   z-index: 10;
   display: flex;
   flex-wrap: wrap;
@@ -934,6 +950,74 @@ button.icon {
   font-size: 0.9rem;
 }
 
+/* ───────── 확인 창 ───────── */
+
+.dialog {
+  border: none;
+  border-radius: 14px;
+  padding: 0;
+  width: min(26rem, calc(100% - 2rem));
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.25);
+}
+
+.dialog::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+
+.dialog-body {
+  display: grid;
+  gap: 0.6rem;
+  padding: 1.1rem;
+}
+
+.dialog-title {
+  margin: 0;
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.dialog-body .hint {
+  margin: 0;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+.danger-fill {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+  font-weight: 600;
+}
+
+.copy-area {
+  width: 100%;
+  font: inherit;
+  font-size: 0.85rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 0.5rem;
+  background: var(--bg);
+  color: var(--text);
+  resize: none;
+}
+
+.saved-image {
+  display: block;
+  max-width: 100%;
+  max-height: 60vh;
+  margin: 0 auto;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  -webkit-touch-callout: default;
+}
+
 /* ───────── 알림 ───────── */
 
 .toast {
@@ -967,7 +1051,7 @@ button.icon {
 
 @media (max-width: 520px) {
   .content {
-    padding: 0.75rem 0.5rem;
+    padding: 0.75rem 1rem;
   }
   .card {
     padding: 0.85rem 0.75rem;

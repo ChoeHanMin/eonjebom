@@ -24,7 +24,7 @@ export function renderGrid(container, opts) {
 
   const grid = document.createElement('div');
   grid.className = `grid${editable ? ' editable' : ''}`;
-  grid.style.gridTemplateColumns = `3.4rem repeat(${columns.length}, minmax(2.6rem, 1fr))`;
+  grid.style.gridTemplateColumns = `3.4rem repeat(${columns.length}, minmax(2.3rem, 1fr))`;
 
   grid.append(div('corner'));
   for (const col of columns) {
