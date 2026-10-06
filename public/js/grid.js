@@ -81,6 +81,7 @@ export function renderGrid(container, opts) {
     let current = null;
     let previewed = [];
     let pointer = null; // 마지막 포인터 위치
+    let origin = null; // 드래그를 시작한 위치
     let scrollFrame = 0;
     const tip = div('drag-tip');
 
@@ -145,12 +146,14 @@ export function renderGrid(container, opts) {
       const left = Math.max(box.left, 0);
       const right = Math.min(box.right, window.innerWidth);
       const step = (dist) => Math.ceil(MAX_SCROLL_STEP * (1 - Math.max(dist, 0) / EDGE_PX));
+      // 가장자리 쪽으로 실제로 끌고 있을 때만 스크롤한다. (가장자리 칸에서 시작해 옆으로 끌 때는 스크롤하지 않음)
+      const MOVED = 12;
       let dy = 0;
       let dx = 0;
-      if (pointer.y > bottom - EDGE_PX) dy = step(bottom - pointer.y);
-      else if (pointer.y < top + EDGE_PX + 40) dy = -step(pointer.y - top - 40); // 위쪽은 요일 머리줄만큼 여유
-      if (pointer.x > right - EDGE_PX) dx = step(right - pointer.x);
-      else if (pointer.x < left + EDGE_PX + 54) dx = -step(pointer.x - left - 54); // 왼쪽은 시간 줄만큼 여유
+      if (pointer.y > bottom - EDGE_PX && pointer.y - origin.y > MOVED) dy = step(bottom - pointer.y);
+      else if (pointer.y < top + EDGE_PX + 40 && origin.y - pointer.y > MOVED) dy = -step(pointer.y - top - 40); // 위쪽은 요일 머리줄만큼 여유
+      if (pointer.x > right - EDGE_PX && pointer.x - origin.x > MOVED) dx = step(right - pointer.x);
+      else if (pointer.x < left + EDGE_PX + 54 && origin.x - pointer.x > MOVED) dx = -step(pointer.x - left - 54); // 왼쪽은 시간 줄만큼 여유
       if (!dy && !dx) return;
       const beforeTop = container.scrollTop;
       const beforeLeft = container.scrollLeft;
@@ -174,7 +177,7 @@ export function renderGrid(container, opts) {
       e.preventDefault();
       grid.setPointerCapture(e.pointerId);
       document.body.append(tip);
-      pointer = { x: e.clientX, y: e.clientY };
+      pointer = origin = { x: e.clientX, y: e.clientY };
       anchor = current = hit;
       preview();
     });
@@ -199,7 +202,7 @@ export function renderGrid(container, opts) {
       tip.remove();
       for (const el of previewed) el.classList.remove('preview', ...previewClasses);
       const changed = apply ? rect().map(({ ci, slot }) => ({ key: columns[ci].key, slot })) : [];
-      anchor = current = pointer = null;
+      anchor = current = pointer = origin = null;
       previewed = [];
       if (changed.length) opts.onPaint(changed);
     };

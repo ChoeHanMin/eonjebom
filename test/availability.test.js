@@ -69,10 +69,7 @@ test('합치기: 가장 바쁜 사람 기준, 한 명이라도 미입력이면 �
 });
 
 test('추천: 한가한 시간대가 먼저, 너무 짧은 구간과 지난 시간은 제외', () => {
-  const combined = combineSchedules(
-    [DATE],
-    [scheduleFrom({ 20: 3, 21: 3, 22: 2, 23: 2, 24: 2, 30: 3, 40: 1, 41: 1 })],
-  );
+  const combined = combineSchedules([DATE], [scheduleFrom({ 20: 3, 21: 3, 22: 2, 23: 2, 24: 2, 30: 3, 40: 1, 41: 1 })]);
   const all = suggestTimes([DATE], combined, { minSlots: 2 });
   assert.deepEqual(
     all.map((s) => [s.startSlot, s.endSlot, s.minLevel]),

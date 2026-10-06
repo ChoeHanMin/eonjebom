@@ -1,0 +1,47 @@
+name: Test & Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      # 빌드한 HTML 파일을 Actions 실행 화면에서 내려받을 수 있게 남긴다.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eonjebom-html
+          path: dist/index.html
+      - if: github.ref == 'refs/heads/main' && !github.event.repository.private
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  # 저장소가 공개(public)일 때만 GitHub Pages 에 올린다. (무료 계정은 비공개 저장소에서 Pages 를 쓸 수 없음)
+  pages:
+    needs: build
+    if: github.ref == 'refs/heads/main' && !github.event.repository.private
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

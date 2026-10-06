@@ -916,6 +916,84 @@ button.icon {
   overflow-wrap: anywhere;
 }
 
+/* ───────── 코드 붙여 넣기 / 펼치는 안내 ───────── */
+
+.add-friend {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+@media (max-width: 520px) {
+  .add-friend {
+    grid-template-columns: 1fr;
+  }
+}
+
+.code-input,
+.restore textarea {
+  width: 100%;
+  min-width: 0;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  background: var(--surface);
+  color: var(--text);
+  resize: vertical;
+  word-break: break-all;
+}
+
+.chip-age {
+  margin-left: 0.35rem;
+  font-size: 0.7rem;
+  font-weight: 400;
+  opacity: 0.75;
+}
+
+details.restore,
+details.howto {
+  font-size: 0.875rem;
+}
+
+details.restore {
+  border-top: 1px solid var(--line);
+  padding-top: 0.6rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+details.restore[open] {
+  display: grid;
+}
+
+details.restore > *:not(summary) {
+  margin-top: 0.5rem;
+}
+
+details summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+details.howto {
+  margin-top: 0.75rem;
+}
+
+details.howto ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.35rem;
+  color: var(--muted);
+}
+
+details.howto strong {
+  color: var(--text);
+}
+
 /* ───────── 내 정보 ───────── */
 
 .my-code {

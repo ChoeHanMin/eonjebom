@@ -49,9 +49,3 @@ export function shortDate(dateStr) {
   const [, m, d] = dateStr.split('-').map(Number);
   return `${m}/${d}`;
 }
-
-// ── 공유 코드 ──
-
-export function formatCode(code) {
-  return code ? `${code.slice(0, 4)}-${code.slice(4)}` : '';
-}
