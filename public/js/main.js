@@ -1,6 +1,7 @@
 import { createStore, browserStorage } from '../../src/store.js';
 import { renderGrid } from './grid.js';
 import { saveGridImage } from './export.js';
+import { detectInApp, externalOpenUrl, shareableUrl } from './inapp.js';
 import {
   LEVELS,
   WEEKDAYS,
@@ -458,23 +459,116 @@ function renderShell() {
 }
 
 window.addEventListener('hashchange', () => {
-  if (readCodeFromHash()) return boot();
+  if (readIncomingCode()) return boot();
   if (store.me) renderShell();
 });
 
 /** '#c=시간표코드' 링크로 들어온 경우 (GitHub Pages 등에 올렸을 때) */
-function readCodeFromHash() {
+/** 친구가 보낸 링크('#c=코드', 외부 브라우저로 넘어온 경우 '?c=코드')로 들어왔으면 코드를 꺼내 둔다. */
+function readIncomingCode() {
   const hash = location.hash.slice(1);
-  if (!hash.startsWith('c=')) return false;
-  state.incomingCode = decodeURIComponent(hash.slice(2));
-  history.replaceState(null, '', '#compare');
+  const fromQuery = new URLSearchParams(location.search).get('c');
+  const code = hash.startsWith('c=') ? decodeURIComponent(hash.slice(2)) : fromQuery;
+  if (!code) return false;
+  state.incomingCode = code;
+  history.replaceState(null, '', `${location.pathname}#compare`); // 주소창에서 코드를 지운다
   return true;
 }
 
 function boot() {
-  readCodeFromHash();
+  readIncomingCode();
   if (!store.me) return renderWelcome();
   afterStart(false);
+}
+
+// ───────────────────────── 카카오톡 등 앱 안에서 열렸을 때 ─────────────────────────
+
+function sessionFlag(key, value) {
+  try {
+    if (value === undefined) return sessionStorage.getItem(`eonjebom:${key}`) === '1';
+    sessionStorage.setItem(`eonjebom:${key}`, '1');
+  } catch {
+    // 무시
+  }
+  return false;
+}
+
+/**
+ * 앱 안 브라우저는 크롬·사파리와 저장 공간이 따로라 시간표가 따로 놀게 된다.
+ * 먼저 크롬·사파리로 자동으로 넘기고, 안 되면 직접 여는 방법을 안내한다.
+ */
+function renderInAppGuide(kind) {
+  const ua = navigator.userAgent;
+  const target = shareableUrl(location);
+  const escape = externalOpenUrl(kind, target, ua);
+  const appName = kind === 'kakao' ? '카카오톡' : kind === 'line' ? '라인' : '앱';
+
+  app.replaceChildren(
+    h(
+      'main.auth',
+      {},
+      h(
+        'section.card.inapp-card',
+        {},
+        h('h1.logo', {}, '언제봄'),
+        h('h2', {}, `${appName} 안에서 열렸어요`),
+        h(
+          'p',
+          {},
+          `${appName} 안의 브라우저에서 만든 시간표는 크롬·사파리에서 보이지 않아요. `,
+          h('strong', {}, '크롬(안드로이드)이나 사파리(아이폰)로 열어 주세요.'),
+        ),
+        escape ? h('a.button.primary.big', { href: escape, id: 'open-external' }, '크롬·사파리로 열기') : null,
+        h(
+          'ol.steps',
+          {},
+          h('li', {}, '안 열리면: 화면 구석의 메뉴(⋮ 또는 ⋯)를 누르고'),
+          h('li', {}, "'다른 브라우저로 열기' 또는 'Safari로 열기'를 고르세요."),
+        ),
+        h(
+          'div.inapp-link',
+          {},
+          h('input.mono', {
+            id: 'inapp-url',
+            value: target,
+            readonly: true,
+            'aria-label': '이 페이지 주소',
+            onFocus: (e) => e.target.select(),
+          }),
+          h(
+            'button.small',
+            { type: 'button', onClick: () => copyText(target, '링크를 복사했어요. 크롬·사파리 주소창에 붙여 넣으세요.') },
+            '링크 복사',
+          ),
+        ),
+        h(
+          'button.link',
+          {
+            type: 'button',
+            onClick: () => {
+              sessionFlag('stayInApp', true);
+              boot();
+            },
+          },
+          '그냥 여기서 쓸게요',
+        ),
+      ),
+    ),
+  );
+
+  // 처음 한 번은 자동으로 넘긴다. (같은 창에서 다시 들어오면 안내만 보여 준다)
+  if (escape && !sessionFlag('escapeTried')) {
+    sessionFlag('escapeTried', true);
+    setTimeout(() => {
+      location.href = escape;
+    }, 50);
+  }
+}
+
+function startup() {
+  const kind = EMBEDDED ? null : detectInApp(navigator.userAgent);
+  if (kind && !sessionFlag('stayInApp')) return renderInAppGuide(kind);
+  boot();
 }
 
 // ───────────────────────── 언제봄 (친구와 비교) ─────────────────────────
@@ -1096,4 +1190,4 @@ function renderMe(root) {
   );
 }
 
-boot();
+startup();

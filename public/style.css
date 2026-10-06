@@ -1028,6 +1028,34 @@ details.howto strong {
   font-size: 0.9rem;
 }
 
+/* ───────── 카카오톡 등 앱 안에서 열렸을 때 ───────── */
+
+.inapp-card {
+  width: 100%;
+  max-width: 420px;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.inapp-card h1,
+.inapp-card h2,
+.inapp-card p {
+  margin: 0;
+}
+
+.inapp-card .steps {
+  margin: 0;
+}
+
+.inapp-link {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.inapp-link input {
+  flex: 1;
+}
+
 /* ───────── 확인 창 ───────── */
 
 .dialog {
