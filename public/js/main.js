@@ -320,7 +320,9 @@ function daysAgo(ms) {
 
 // ───────────────────────── 시작 화면 ─────────────────────────
 
+/** 메인(시작) 화면. 이미 시간표가 있으면 '돌아가기'를 먼저 보여 준다. */
 function renderWelcome(notice) {
+  const existing = store.me;
   const error = h('p.form-error', { role: 'alert' });
   const nameInput = h('input', {
     id: 'start-name',
@@ -335,9 +337,12 @@ function renderWelcome(notice) {
   const form = h(
     'form.card.start-card',
     {
-      onSubmit: (e) => {
+      onSubmit: async (e) => {
         e.preventDefault();
+        if (!nameInput.value.trim()) return (error.textContent = '이름을 적어 주세요.');
+        if (existing && !(await confirmReplace())) return;
         try {
+          if (existing) store.deleteAll();
           store.start(nameInput.value);
           afterStart(true);
         } catch (err) {
@@ -346,8 +351,14 @@ function renderWelcome(notice) {
       },
     },
     state.incomingCode ? h('p.invite', {}, '친구가 보낸 시간표가 있어요! 이름을 적고 시작하면 바로 비교해 드릴게요.') : null,
-    h('h2', {}, '이름만 적으면 바로 시작해요'),
-    h('p.hint', {}, '가입도 서버도 없어요. 내 시간표는 이 브라우저에만 저장돼요.'),
+    h('h2', {}, existing ? '새 이름으로 다시 시작하기' : '이름만 적으면 바로 시작해요'),
+    h(
+      'p.hint',
+      {},
+      existing
+        ? `새로 시작하면 지금 이 브라우저에 있는 ${existing.name} 님의 시간표와 받은 친구 코드가 지워져요.`
+        : '가입도 서버도 없어요. 내 시간표는 이 브라우저에만 저장돼요.',
+    ),
     h('label.field', { for: 'start-name' }, '내 이름', nameInput),
     error,
     h('button.primary.big', { type: 'submit' }, '시작하기'),
@@ -361,12 +372,14 @@ function renderWelcome(notice) {
         'button.small',
         {
           type: 'button',
-          onClick: () =>
+          onClick: async () => {
+            if (existing && !(await confirmReplace())) return;
             attempt(() => {
               store.restoreFromCode(restoreInput.value);
               toast('시간표를 불러왔어요.', 'success');
               afterStart(false);
-            }),
+            });
+          },
         },
         '코드로 불러오기',
       ),
@@ -391,10 +404,67 @@ function renderWelcome(notice) {
         ),
         legend(),
       ),
-      h('div.start-col', {}, notice ? h('p.notice', {}, notice) : null, form),
+      h(
+        'div.start-col',
+        {},
+        notice ? h('p.notice', {}, notice) : null,
+        existing
+          ? h(
+              'section.card.resume-card',
+              {},
+              h('p', {}, h('strong', {}, `${existing.name}`), ' 님의 시간표가 이 브라우저에 그대로 있어요.'),
+              h(
+                'button.primary.big',
+                {
+                  type: 'button',
+                  onClick: () => {
+                    history.replaceState(null, '', `${location.pathname}#compare`);
+                    afterStart(false);
+                  },
+                },
+                `${existing.name} 님 시간표로 돌아가기`,
+              ),
+            )
+          : null,
+        form,
+        h('button.dev-button', { type: 'button', onClick: showDeveloper }, '개발자'),
+      ),
     ),
   );
-  nameInput.focus();
+  if (!existing) nameInput.focus();
+}
+
+function confirmReplace() {
+  return ask({
+    title: '지금 시간표를 지우고 새로 시작할까요?',
+    detail: `${store.me.name} 님의 시간표와 받은 친구 코드가 지워지고, 되돌릴 수 없어요.`,
+    okLabel: '지우고 시작',
+    danger: true,
+  });
+}
+
+function showDeveloper() {
+  return ask({
+    title: '개발자',
+    detail: '최한민, 한국외국어대학교 CES, 친한 친구의 기가 막히는 아이디어를 듣고 바로 프로토타입을 만들었따!!!!',
+    okLabel: '닫기',
+    cancelLabel: null,
+  });
+}
+
+/** 좌상단 '언제봄' 글자나 '홈 화면으로 가기'를 누르면, 한 번 더 물어본 뒤 메인 화면으로 간다. */
+async function goHome(e) {
+  e?.preventDefault();
+  const ok = await ask({
+    title: '메인 화면으로 가시겠습니까?',
+    detail: '시간표 다 잃어버리실 수도 있어요 ㅠㅠ',
+    okLabel: '응 갈거야',
+    cancelLabel: '아니, 안 갈래',
+  });
+  if (!ok) return;
+  history.replaceState(null, '', location.pathname);
+  renderWelcome();
+  window.scrollTo(0, 0);
 }
 
 function afterStart(isNew) {
@@ -428,13 +498,15 @@ function renderShell() {
       h(
         'header.topbar',
         {},
-        h('a.logo', { href: '#compare' }, '언제봄'),
+        h('a.logo', { href: location.pathname, onClick: goHome, title: '메인 화면으로' }, '언제봄'),
         h(
           'nav.tabs',
           { 'aria-label': '메뉴' },
-          Object.entries(VIEWS).map(([key, v]) =>
+          Object.entries(VIEWS).flatMap(([key, v]) => [
             h('a.tab', { href: `#${key}`, 'aria-current': key === view ? 'page' : null }, v.title),
-          ),
+            // '캘린더 가져오기' 바로 다음에 '홈 화면으로 가기'
+            key === 'calendars' ? h('a.tab.home-tab', { href: location.pathname, onClick: goHome }, '🏠 홈 화면으로 가기') : null,
+          ]),
         ),
         h(
           'button.code-chip',

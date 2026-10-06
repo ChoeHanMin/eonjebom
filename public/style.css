@@ -1097,6 +1097,32 @@ details.howto strong {
   flex: 1;
 }
 
+/* ───────── 메인 화면: 돌아가기 / 개발자 ───────── */
+
+.resume-card {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.resume-card p {
+  margin: 0;
+}
+
+.dev-button {
+  justify-self: center;
+  border-radius: 999px;
+  padding: 0.4rem 1.1rem;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.home-tab {
+  border: 1px dashed var(--line-strong);
+}
+
 /* ───────── 벚꽃 배경 ───────── */
 
 /* 화면에 고정된 배경 그림 (iOS 는 background-attachment: fixed 를 무시하므로 고정 요소로 깐다) */
