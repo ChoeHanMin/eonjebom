@@ -428,7 +428,7 @@ function renderWelcome(notice) {
             )
           : null,
         form,
-        h('button.dev-button', { type: 'button', onClick: showDeveloper }, '개발자'),
+        h('button.dev-button', { type: 'button', onClick: showMakers }, '제작자'),
       ),
     ),
   );
@@ -444,10 +444,17 @@ function confirmReplace() {
   });
 }
 
-function showDeveloper() {
+function showMakers() {
   return ask({
-    title: '개발자',
-    detail: '최한민, 한국외국어대학교 CES, 친한 친구의 기가 막히는 아이디어를 듣고 바로 프로토타입을 만들었따!!!!',
+    title: '제작자',
+    content: h(
+      'div.makers',
+      {},
+      h('p.maker-role', {}, '개발자'),
+      h('p', {}, '최한민, 한국외국어대학교 CES, 친한 친구의 기가 막히는 아이디어를 듣고 바로 프로토타입을 만들었따!!!!'),
+      h('p.maker-role.spaced', {}, '기획자'),
+      h('p', {}, '김가연, 한국외국어대학교 CES, 친한 친구의 기가 막히는 구현력으로 바로 기획을 했따!!!!'),
+    ),
     okLabel: '닫기',
     cancelLabel: null,
   });
